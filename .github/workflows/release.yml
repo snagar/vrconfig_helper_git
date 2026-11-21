@@ -148,7 +148,7 @@ jobs:
   # --- Windows -----------------------------------------------------------------------
   # Visual Studio 2022 (MSVC), 64-bit; the C++ runtime is linked into the plugin (/MT).
   build-win:
-    if: ( 1 == 2 )
+    #if: ( 1 == 2 )
     needs: [pre-build]
     runs-on: windows-2022
     strategy:
@@ -200,7 +200,7 @@ jobs:
   # One plugin file for Apple Silicon and Intel (Universal 2), macOS 13.3 or newer.
   # Signed ad hoc (no Apple Developer account); see the install notes in README.md.
   build-mac:
-    if: ( 1 == 2 )
+    #if: ( 1 == 2 )
     needs: [pre-build]
     runs-on: macos-15
     strategy:
