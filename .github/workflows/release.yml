@@ -83,7 +83,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+#        build_type: [Release, Debug]
+        build_type: [Debug]
     steps:
       - name: Install the build tools
         shell: bash
@@ -127,6 +128,7 @@ jobs:
   # --- Windows -----------------------------------------------------------------------
   # Visual Studio 2022 (MSVC), 64-bit; the C++ runtime is linked into the plugin (/MT).
   build-win:
+    # if: ( 1 == 2 )
     needs: [pre-build]
     runs-on: windows-2022
     strategy:
@@ -163,6 +165,7 @@ jobs:
   # Signed ad hoc (no Apple Developer account); see the install notes in README.md.
   build-mac:
     needs: [pre-build]
+    #if: ( 1 == 2 )
     runs-on: macos-15
     strategy:
       fail-fast: false
