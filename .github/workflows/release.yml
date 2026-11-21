@@ -1,14 +1,14 @@
 # VRConfig Helper - build for Linux, Windows and macOS, and publish releases.
 #
-# When it runs:
-#   - every push to a branch, and every pull request: build all three systems
-#     (Release + Debug) and keep the result as workflow artifacts. Nothing is published.
-#   - a pushed tag: the same, plus a GitHub Release with the plugin zip:
+# When it runs (plain pushes and pull requests do NOT start it):
+#   - a pushed tag that matches one of these; it builds all three systems
+#     (Release + Debug) and publishes a GitHub Release with the plugin zip:
 #       v1.0.0, 1.0.0-release ........ release
 #       b1.0.0, 1.0.0-beta2 .......... pre-release (beta)
 #       t1.0.0, 1.0.0-test3 .......... pre-release (test build)
-#       any other tag ................ build only, nothing published
-#   - by hand: Actions tab > "release - multi platform" > Run workflow (build only).
+#     Any other tag is ignored.
+#   - by hand: Actions tab > "release - multi platform" > Run workflow. Builds
+#     only; the zips are kept as workflow artifacts, nothing is published.
 #
 # The X-Plane SDK comes from the repository: libs/xpsdk/ or libs/XPSDK.zip.
 # CMake unpacks the zip by itself (any folder name inside it), so no step here
@@ -23,10 +23,14 @@ name: release - multi platform
 
 on:
   push:
-    branches: ['**']
-    tags: ['*']
-  pull_request:
-  workflow_dispatch:
+    tags:                     # only these tags; branch pushes never start the workflow
+      - 'v*'
+      - 'b*'
+      - 't*'
+      - '*-release*'
+      - '*-beta*'
+      - '*-test*'
+  workflow_dispatch:          # Run workflow button (build only)
 
 permissions:
   contents: read
