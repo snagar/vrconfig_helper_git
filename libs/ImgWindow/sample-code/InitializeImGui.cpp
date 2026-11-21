@@ -1,0 +1,407 @@
+// ---------------------------------------------------------------------------
+//  InitializeImGui.cpp
+//
+//  Steven L. Goldberg, 2026
+//
+//  This is an EXAMPLE of how to initialize ImGui for use in an X-Plane
+//  plugin using the ImgWindow and ImgFontAtlas classes.  It is not a complete
+//  example, but it shows how to set up the font atlas and load fonts into it,
+//  including merging FontAwesome icons into each font, with offsets where we
+//  may want to tweak the baseline to match the text in various combinations.
+//
+//  This is just one example, taken from the A-Better-Camera source code, just
+//  to show how fonts can be loaded into a common font atlas shared across all
+//  windows using ImgWindow.  Other sample code may be available as well, to
+//  show how to use ImgWindow in general -- however, this is just to show the
+//  initialization that most plugins will want and need to get things going.
+//
+//  tl/dr:
+//  The InitializeImGui() function below is meant to be global, called once at
+//  plugin startup, and it will set up the shared font atlas for all windows to
+//  use.  It will also load the Roboto font and merge FontAwesome icons into
+//  it, so that any window can use them via ImGui::PushFont() with the
+//  appropriate font index.
+//
+//  You *must* call the companion TeardownImGui() function from either 
+//  XPluginStop() or XPluginDisable() (which depends on where you call 
+//  InitializeImGui()), whenever the plugin is shutting down or reloading
+//  (e.g., via XPLMReloadPlugins). Failure to do so may result in VRAM leaks
+//  if using Panel Graphics, or crashes due to the shared font atlas not being
+//  properly destroyed if using OpenGL or Panel Graphics.
+//
+//  You will find an example of this function in the file "TeardownImGui.cpp".
+// 
+//  (There is another use case where you can, for example, call the
+//  TeardownImGui() function mid-flight, to completely rebuild the font atlas
+//  if you need to replace all your current fonts with others such as bigger
+//  font sizes as an accommodation to the user. In such a case, you may call
+//  TeardownImGui() to clear the current font atlas -- but you should *only*
+//  do this after dynamically closing *all* your existing ImgWindow instances!
+//  Calling TeardownImGui() will then clear the current font atlas and reset 
+//  the shared pointer. Once that is done, you can create a new atlas, load 
+//  all the fonts you need, attach the new atlas smart pointer to ImgWindow 
+//  (just as demonstrated above), and then reopen any windows you had open 
+//  before. This sequence of destroying, rebuilding, and reopening must all 
+//  be done synchronously, such as within a single flight-loop callback.)
+//
+//  --------------------------------------------------------------------------
+//
+//  For a complete example of how to use ImGui in an X-Plane plugin with
+//  ImgWindow and ImgFontAtlas, see the GitHub repository for "imgui4xp", at
+//  <https://github.com/sparker256/imgui4xp>.
+//
+//  IMPORTANT: If you start with the above "imgui4xp" project, ImgWindow is
+//  required for that project to build -- however, since ImgWindow is defined
+//  as a "submodule" within "imgui4xp", you will need to use the following
+//  command *ONCE* immediately after cloning that repository locally:
+//  % git submodule update --init --recursive
+//
+//  This will ensure you have the dependencies for "imgui4xp" loaded, which
+//  will include the latest version of ImgWindow as well as this sample code
+//  and the provided font files.
+// ---------------------------------------------------------------------------
+
+#include "ImgWindow.h"   /* won't correctly load in-situ (just sample code) */
+
+// Fonts downloaded and converted in the "fonts" directory are normally 14px:
+constexpr int SYSTEM_FONT_SIZE = 14;     // roughly equivalent size for Roboto
+
+#define BASELINE_FONT_SIZE    ( SYSTEM_FONT_SIZE )
+
+// FYI: Here is an example of how a plugin might define these fonts in a 
+// global .h file (so subclasses can easily push them in buildInterface).
+// This macro approach dynamically fetches the active context's font array:
+//
+// #define IM_FONT_SLOT(i)       ImGui::GetIO().Fonts->Fonts[i]
+// #define IM_NORMAL_FONT        IM_FONT_SLOT(0)
+// #define IMG_TITLE_FONT        IM_FONT_SLOT(1)
+// #define IM_SMALLER_FONT       IM_FONT_SLOT(2)
+// #define IM_BOLD_FONT          IM_FONT_SLOT(3)
+// #define IM_BOLD_LARGER_FONT   IM_FONT_SLOT(4)
+// #define IM_MONO_NORMAL_FONT   IM_FONT_SLOT(5)
+// #define IM_ITALIC_FONT        IM_FONT_SLOT(6)
+// #define IM_MONO_MEDIUM_FONT   IM_FONT_SLOT(7)
+// #define IM_BOLD_ITALIC_FONT   IM_FONT_SLOT(8)
+
+// Load fonts from files generated via ImGui utility which converts TTF to
+// compressed C++ arrays, included in the "fonts" directory as .inc files:
+// (NOTE: all these fonts are explicitly loaded into the font atlas, below.)
+#include "fonts/IconsFontAwesome5.h"                  /* FontAwesome icon macros */
+#if !defined(IMGWINDOW_ENABLE_FONTAWESOME)
+#include "fonts/fa-solid-900.inc"                      /* FontAwesome icons byte data */
+#endif
+#include "fonts/gf-roboto-regular-400.inc"
+#include "fonts/gf-roboto-bold.inc"
+#include "fonts/gf-robotomono-regular-400.inc"
+#include "fonts/gf-roboto-italic-400.inc"
+#include "fonts/gf-robotomono-regular.inc"                    /* 500 medium */
+#include "fonts/gf-roboto-bold-italic.inc"
+
+#define FA_FONT_SIZE(x)    (x - 2) /* load FontAwesome at 2 px smaller size */
+
+// Static helper function to merge FontAwesome icons into a base font.
+// Demonstrates both the modern turnkey ImgWindow v2 helper (-DIMGWINDOW_ENABLE_FONTAWESOME)
+// and the traditional manual ImGui merge pattern (default):
+static void MergeFontAwesomeIcons(ImFont* baseFont, float fontSize, const ImWchar* ranges = nullptr)
+{
+#if defined(IMGWINDOW_ENABLE_FONTAWESOME)
+    // --- Modern Turnkey Route (-DIMGWINDOW_ENABLE_FONTAWESOME) ---
+    // The framework encapsulates fa-solid-900.inc internally and automatically
+    // configures MergeMode, PixelSnapH, and optical baseline sizing:
+    ImgWindow::sFontAtlas->MergeFontAwesome(baseFont, FA_FONT_SIZE(fontSize), ranges);
+#else
+    // --- Traditional Manual Route (Default Sample Code Pattern) ---
+    // Manually configure ImFontConfig with MergeMode = true:
+    ImFontConfig mergeConfig;
+    mergeConfig.MergeMode = true;
+    mergeConfig.GlyphOffset = { 0.f, 0.f };
+    ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF(
+        (void*)fa_solid_900_compressed_data,
+        fa_solid_900_compressed_size,
+        FA_FONT_SIZE(fontSize),
+        &mergeConfig,
+        ranges
+    );
+#endif
+}
+
+bool InitializeImGui ()
+{
+    // Create one (and exactly one) font atlas, so all fonts are shared across
+    // all ImGui contexts (i.e., across all instances of ImgWindow and its
+    // derived classes):
+    if (!ImgWindow::sFontAtlas)
+        ImgWindow::sFontAtlas = std::make_shared<ImgFontAtlas>();
+    
+    ImFontConfig mainConfig;             // reused for each font we load below
+    
+    // ------------- BUILD UP FONT ARRAY for ImGui::PushFont(): --------------
+
+// -------------- Fonts[0 = IM_NORMAL_FONT]: ------------------------------
+
+    // From Google Fonts as "gf_roboto_regular_400_compressed_{size,data}":
+    strncpy(mainConfig.Name, "Roboto-Regular-400-14px", 40);
+    mainConfig.GlyphOffset = { 0.f, 0.f };   // keep descenders above baseline
+    ImFont* regularFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_regular_400_compressed_data,
+         gf_roboto_regular_400_compressed_size,
+         BASELINE_FONT_SIZE, &mainConfig);
+    
+    // We only read very selectively the individual glyphs we are actually
+    // using to save on texture RAM impact:
+    static ImVector<ImWchar> icon_ranges;
+    ImFontGlyphRangesBuilder builder;
+    // Add all icons that are actually used (they concatenate into one string
+    // a la sprites):
+    // (NOTE: these are just the ones A-Better-Camera uses; you can add or
+    // remove any of the ones you want included in every font as needed!
+    // When a specific icon is not listed here but you try to use it in your
+    // ImGui code, it will just show up as a "?" or a blank square box; just
+    // listing such icons here will make them show up in your plugin's UI!)
+    // MARK: - - - - >   F A   I C O N S    < - - - -
+    builder.AddText(ICON_FA_ALIGN_CENTER
+                    ICON_FA_ANGLE_DOUBLE_DOWN
+                    ICON_FA_ANGLE_DOUBLE_LEFT
+                    ICON_FA_ANGLE_DOUBLE_RIGHT
+                    ICON_FA_ANGLE_DOUBLE_UP
+                    ICON_FA_ANGLE_DOWN
+                    ICON_FA_ANGLE_LEFT
+                    ICON_FA_ANGLE_RIGHT
+                    ICON_FA_ANGLE_UP
+                    ICON_FA_ARROW_CIRCLE_DOWN
+                    ICON_FA_ARROW_CIRCLE_LEFT
+                    ICON_FA_ARROW_CIRCLE_RIGHT
+                    ICON_FA_ARROW_CIRCLE_UP
+                    ICON_FA_ARROW_DOWN
+                    ICON_FA_ARROW_LEFT
+                    ICON_FA_ARROW_RIGHT
+                    ICON_FA_ARROW_UP
+                    ICON_FA_ARROWS_ALT_H
+                    ICON_FA_ARROWS_ALT_V
+                    ICON_FA_ASTERISK
+                    ICON_FA_CAMERA
+                    ICON_FA_CARET_DOWN
+                    ICON_FA_CARET_LEFT
+                    ICON_FA_CARET_RIGHT
+                    ICON_FA_CARET_SQUARE_DOWN
+                    ICON_FA_CARET_SQUARE_LEFT
+                    ICON_FA_CARET_SQUARE_RIGHT
+                    ICON_FA_CARET_SQUARE_UP
+                    ICON_FA_CARET_UP
+                    ICON_FA_CART_ARROW_DOWN
+                    ICON_FA_CHECK
+                    ICON_FA_CHECK_CIRCLE
+                    ICON_FA_CHECK_SQUARE
+                    ICON_FA_CHEVRON_CIRCLE_LEFT
+                    ICON_FA_CHEVRON_CIRCLE_RIGHT
+                    ICON_FA_CHEVRON_DOWN
+                    ICON_FA_CHEVRON_LEFT
+                    ICON_FA_CHEVRON_RIGHT
+                    ICON_FA_CHEVRON_UP
+                    ICON_FA_CLIPBOARD_LIST
+                    ICON_FA_CLOCK
+                    ICON_FA_COG
+                    ICON_FA_CROSS
+                    ICON_FA_DHARMACHAKRA
+                    ICON_FA_DIAGNOSES
+                    ICON_FA_EDIT
+                    ICON_FA_ELLIPSIS_H
+                    ICON_FA_ELLIPSIS_V
+                    ICON_FA_EXCLAMATION
+                    ICON_FA_EXCLAMATION_CIRCLE
+                    ICON_FA_EXCLAMATION_TRIANGLE
+                    ICON_FA_EYE
+                    ICON_FA_EXTERNAL_LINK_SQUARE_ALT
+                    ICON_FA_FAST_FORWARD
+                    ICON_FA_FAST_BACKWARD
+                    ICON_FA_FILE
+                    ICON_FA_FILE_ALT
+                    ICON_FA_FROWN
+                    ICON_FA_FROWN_OPEN
+                    ICON_FA_FOLDER_OPEN
+                    ICON_FA_I_CURSOR
+                    ICON_FA_ICONS
+                    ICON_FA_INFO
+                    ICON_FA_INFO_CIRCLE
+                    ICON_FA_HAND_POINT_LEFT
+                    ICON_FA_HAND_POINT_RIGHT
+                    ICON_FA_LEVEL_UP_ALT
+                    ICON_FA_LIGHTBULB
+                    ICON_FA_LINK
+                    ICON_FA_LIST
+                    ICON_FA_LIST_ALT
+                    ICON_FA_LIST_OL
+                    ICON_FA_LIST_UL
+                    ICON_FA_LOCATION_ARROW
+                    ICON_FA_LOCK
+                    ICON_FA_LOCK_OPEN
+                    ICON_FA_LONG_ARROW_ALT_DOWN
+                    ICON_FA_LONG_ARROW_ALT_LEFT
+                    ICON_FA_LONG_ARROW_ALT_RIGHT
+                    ICON_FA_LONG_ARROW_ALT_UP
+                    ICON_FA_MAP_MARKER_ALT
+                    ICON_FA_MINUS
+                    ICON_FA_MINUS_SQUARE
+                    ICON_FA_PAUSE_CIRCLE
+                    ICON_FA_PLANE
+                    ICON_FA_PLAY
+                    ICON_FA_PLUS
+                    ICON_FA_PLUS_SQUARE
+                    ICON_FA_QUESTION
+                    ICON_FA_QUESTION_CIRCLE
+                    ICON_FA_REMOVE_FORMAT
+                    ICON_FA_SAVE
+                    ICON_FA_SEARCH
+                    ICON_FA_SIGN_IN_ALT
+                    ICON_FA_SIGN_OUT_ALT
+                    ICON_FA_SLIDERS_H
+                    ICON_FA_SMILE
+                    ICON_FA_SMILE_BEAM
+                    ICON_FA_SMILE_WINK
+                    ICON_FA_SORT
+                    ICON_FA_SQUARE
+                    ICON_FA_SPINNER
+                    ICON_FA_STEP_BACKWARD
+                    ICON_FA_REDO
+                    ICON_FA_ROAD
+                    ICON_FA_STAR
+                    ICON_FA_TACHOMETER_ALT
+                    ICON_FA_TASKS
+                    ICON_FA_TEXT_WIDTH
+                    ICON_FA_THUMBS_UP
+                    ICON_FA_TIMES
+                    ICON_FA_TIMES_CIRCLE
+                    ICON_FA_TOGGLE_OFF
+                    ICON_FA_TOGGLE_ON
+                    ICON_FA_TOOLS
+                    ICON_FA_TRADEMARK
+                    ICON_FA_TRASH
+                    ICON_FA_TRASH_ALT
+                    ICON_FA_USER_CLOCK
+                    ICON_FA_UNDO
+                    ICON_FA_UNDO_ALT
+                    ICON_FA_UPLOAD
+                    ICON_FA_USER_EDIT
+                    ICON_FA_WINDOW_CLOSE
+                    ICON_FA_WINDOW_MAXIMIZE
+                    ICON_FA_WINDOW_RESTORE);
+    builder.BuildRanges(&icon_ranges);
+    
+    // Merge the icon font with the text font:
+    MergeFontAwesomeIcons(regularFont, BASELINE_FONT_SIZE, icon_ranges.Data);
+    
+// -------------- Fonts[1 = IMG_TITLE_FONT]: ------------------------------
+
+    // Add second, larger font for titles:
+    // (For example, A-Better-Camera uses this for the main window title, and
+    // for the ImGui extension(s) it defines for certain headings/titles.)
+    int titleFontSize = BASELINE_FONT_SIZE + 3;    // titles are <default>+3px
+    strncpy(mainConfig.Name, "Roboto-Regular-400-17px*", 40);
+//  mainConfig.GlyphOffset = { 0.f, -0.5f };   // hand-tweaked vertical offset
+    ImFont* titleFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_regular_400_compressed_data,
+         gf_roboto_regular_400_compressed_size,
+         titleFontSize, &mainConfig);
+    MergeFontAwesomeIcons(titleFont, titleFontSize, icon_ranges.Data);
+    
+// -------------- Fonts[2 = IM_SMALLER_FONT]: ---------------------------------
+    
+    // Add a third font that's smaller (yes, we could scale these, but we want
+    // to be able to mix and match them, and this is the fastest way, though
+    // it takes slightly longer to start up, and slightly more memory):
+    int smallerFontSize = BASELINE_FONT_SIZE - 2;  // <small> = <default> - 2px
+    strncpy(mainConfig.Name, "Roboto-Regular-400-12px*", 40);
+//  mainConfig.GlyphOffset = { 0.f, 0.75f };    // hand-tweaked relative offset
+    ImFont* smallerFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_regular_400_compressed_data,
+         gf_roboto_regular_400_compressed_size,
+         smallerFontSize, &mainConfig);
+    MergeFontAwesomeIcons(smallerFont, smallerFontSize, icon_ranges.Data);
+    
+// -------------- Fonts[3 = IM_BOLD_FONT]: ------------------------------------
+
+    // (Note: using 700 since 900 was a little too much.)
+    int boldFontSize = BASELINE_FONT_SIZE;                 // <default> px size
+    strncpy(mainConfig.Name, "Roboto-Bold-700-14px*", 40);
+    mainConfig.GlyphOffset = { 0.f, 0.f };
+    ImFont* boldFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_bold_compressed_data,
+         gf_roboto_bold_compressed_size,
+         boldFontSize, &mainConfig);
+    MergeFontAwesomeIcons(boldFont, boldFontSize, icon_ranges.Data);
+    
+// -------------- Fonts[4 = IM_BOLD_LARGER_FONT]: -----------------------------
+    
+    int boldLargeFontSize = BASELINE_FONT_SIZE + 2;               // just +2 px
+    strncpy(mainConfig.Name, "Roboto-Bold-700-16px*", 40);
+//  mainConfig.GlyphOffset = { 0.f, -1.5f };
+    ImFont* boldLargeFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_bold_compressed_data,
+         gf_roboto_bold_compressed_size,
+         boldLargeFontSize, &mainConfig);
+    MergeFontAwesomeIcons(boldLargeFont, boldLargeFontSize, icon_ranges.Data);
+    
+// -------------- Fonts[5 = IM_MONO_NORMAL_FONT]: -----------------------------
+    
+    int monoFontSize = BASELINE_FONT_SIZE;
+    strncpy(mainConfig.Name, "RobotoMono-Regular-400-15px", 40);
+    mainConfig.GlyphOffset = { 0.f, 0.f };
+    ImFont* monoFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_robotomono_regular_400_compressed_data,
+         gf_robotomono_regular_400_compressed_size,
+         monoFontSize,
+         &mainConfig);
+    MergeFontAwesomeIcons(monoFont, monoFontSize, icon_ranges.Data);
+    
+// -------------- Fonts[6 = IM_ITALIC_FONT]: ----------------------------------
+
+    int italicFontSize = BASELINE_FONT_SIZE;
+    strncpy(mainConfig.Name, "Roboto-Italic-400-14px", 40);
+    mainConfig.GlyphOffset = { 0.f, 0.f };
+    ImFont* italicFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_italic_400_compressed_data,
+         gf_roboto_italic_400_compressed_size,
+         italicFontSize,
+         &mainConfig);
+    MergeFontAwesomeIcons(italicFont, italicFontSize, icon_ranges.Data);
+    
+// -------------- Fonts[7 = IM_MONO_MEDIUM_FONT]: -----------------------------
+    
+    int mediumMonoFontSize = BASELINE_FONT_SIZE + 1;  // (runs a little small!)
+    strncpy(mainConfig.Name, "RobotoMono-500-14px", 40);
+//  mainConfig.GlyphOffset = { 0.f, -0.5f };           // tweak vertical offset
+    ImFont* mediumMonoFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_robotomono_regular_compressed_data,
+         gf_robotomono_regular_compressed_size,
+         mediumMonoFontSize,
+         &mainConfig);
+    MergeFontAwesomeIcons(mediumMonoFont, mediumMonoFontSize, icon_ranges.Data);
+
+// -------------- Fonts[8 = IM_BOLD_ITALIC_FONT]: -----------------------------
+
+    int boldItalicFontSize = BASELINE_FONT_SIZE;
+    strncpy(mainConfig.Name, "Roboto-BoldItalic-700-14px*", 40);
+    mainConfig.GlyphOffset = { 0.f, 0.f };
+    ImFont* boldItalicFont = ImgWindow::sFontAtlas->AddFontFromMemoryCompressedTTF
+        ((void*)gf_roboto_bold_italic_compressed_data,
+         gf_roboto_bold_italic_compressed_size,
+         boldItalicFontSize, &mainConfig);
+    MergeFontAwesomeIcons(boldItalicFont, boldItalicFontSize, icon_ranges.Data);
+
+// ----------------------------------------------------------------------------
+
+    // Callers can now use ImGui::PushFont() with the 9 loaded fonts above.
+    // If you defined the IM_FONT_SLOT macros in a global .h file as shown
+    // at the top of this file, your UI code simply looks like this:
+    // ImGui::PushFont(IM_BOLD_ITALIC_FONT);
+
+    return true;
+}
+
+// IMPORTANT:
+//
+// TeardownImGui() is now in a separate file, "TeardownImGui.cpp"!
+//
+// It should be called from XPluginStop() or XPluginDisable(), depending on 
+// where you called InitializeImGui(), in order to completely clean up the
+// font atlas and other ImGui resources when they are no longer needed.

@@ -1,0 +1,2567 @@
+/*
+ * ImgWindow.cpp
+ *
+ * Integration for dear imgui into X-Plane.
+ *
+ * Copyright (C) 2018,2020, Christopher Collins
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+*/
+
+#include "ImgWindow.h"
+
+#include <cmath>
+#include <XPLMUtilities.h>
+#include <XPLMDataAccess.h>
+#include <XPLMDisplay.h>
+#include <XPLMGraphics.h>
+#include <XPLMPlugin.h>
+
+#include "imgui_internal.h"
+#include <sys/stat.h>
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#include <map>
+#if defined(__APPLE__) || defined(__MACH__)
+#include <ApplicationServices/ApplicationServices.h>
+#elif defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
+/* ImGui version checks and refactor macros.
+ * IMGUI_V190_REFACTOR defined for ImGui v1.90.0 and above (keyboard API refactor).
+ * IMGUI_V192_REFACTOR defined for ImGui v1.92.0 and above (font atlas refactor).
+ */
+#if defined(IMGUI_VERSION_NUM) && (IMGUI_VERSION_NUM >= 19000)
+#define IMGUI_V190_REFACTOR
+
+#if IMGUI_VERSION_NUM >= 19200
+#define IMGUI_V192_REFACTOR
+#endif
+
+#endif
+/* End ImGui version checks and refactor macros. */
+
+/* Fallback for ImDrawCallback_ResetRenderState if not defined by the user's ImGui version */
+#ifndef ImDrawCallback_ResetRenderState
+#define ImDrawCallback_ResetRenderState (ImDrawCallback)(-8)
+#endif
+
+#ifdef IMGUI_V190_REFACTOR
+static ImGuiKey vpXPLMKeyToImGuiKey(int inVirtualKey) {
+    switch (inVirtualKey) {
+        case XPLM_VK_TAB: return ImGuiKey_Tab;
+        case XPLM_VK_LEFT: return ImGuiKey_LeftArrow;
+        case XPLM_VK_RIGHT: return ImGuiKey_RightArrow;
+        case XPLM_VK_UP: return ImGuiKey_UpArrow;
+        case XPLM_VK_DOWN: return ImGuiKey_DownArrow;
+        case XPLM_VK_PRIOR: return ImGuiKey_PageUp;
+        case XPLM_VK_NEXT: return ImGuiKey_PageDown;
+        case XPLM_VK_HOME: return ImGuiKey_Home;
+        case XPLM_VK_END: return ImGuiKey_End;
+        case XPLM_VK_INSERT: return ImGuiKey_Insert;
+        case XPLM_VK_DELETE: return ImGuiKey_Delete;
+        case XPLM_VK_BACK: return ImGuiKey_Backspace;
+        case XPLM_VK_SPACE: return ImGuiKey_Space;
+        case XPLM_VK_RETURN: return ImGuiKey_Enter;
+        case XPLM_VK_ESCAPE: return ImGuiKey_Escape;
+        case XPLM_VK_ENTER: return ImGuiKey_KeypadEnter;
+        case XPLM_VK_NUMPAD0: return ImGuiKey_Keypad0;
+        case XPLM_VK_NUMPAD1: return ImGuiKey_Keypad1;
+        case XPLM_VK_NUMPAD2: return ImGuiKey_Keypad2;
+        case XPLM_VK_NUMPAD3: return ImGuiKey_Keypad3;
+        case XPLM_VK_NUMPAD4: return ImGuiKey_Keypad4;
+        case XPLM_VK_NUMPAD5: return ImGuiKey_Keypad5;
+        case XPLM_VK_NUMPAD6: return ImGuiKey_Keypad6;
+        case XPLM_VK_NUMPAD7: return ImGuiKey_Keypad7;
+        case XPLM_VK_NUMPAD8: return ImGuiKey_Keypad8;
+        case XPLM_VK_NUMPAD9: return ImGuiKey_Keypad9;
+        case XPLM_VK_MULTIPLY: return ImGuiKey_KeypadMultiply;
+        case XPLM_VK_ADD: return ImGuiKey_KeypadAdd;
+        case XPLM_VK_SEPARATOR: return ImGuiKey_KeypadDecimal;
+        case XPLM_VK_SUBTRACT: return ImGuiKey_KeypadSubtract;
+        case XPLM_VK_DECIMAL: return ImGuiKey_KeypadDecimal;
+        case XPLM_VK_DIVIDE: return ImGuiKey_KeypadDivide;
+        case XPLM_VK_NUMPAD_ENT: return ImGuiKey_KeypadEnter;
+
+        // Letters A-Z
+        case XPLM_VK_A: return ImGuiKey_A;
+        case XPLM_VK_B: return ImGuiKey_B;
+        case XPLM_VK_C: return ImGuiKey_C;
+        case XPLM_VK_D: return ImGuiKey_D;
+        case XPLM_VK_E: return ImGuiKey_E;
+        case XPLM_VK_F: return ImGuiKey_F;
+        case XPLM_VK_G: return ImGuiKey_G;
+        case XPLM_VK_H: return ImGuiKey_H;
+        case XPLM_VK_I: return ImGuiKey_I;
+        case XPLM_VK_J: return ImGuiKey_J;
+        case XPLM_VK_K: return ImGuiKey_K;
+        case XPLM_VK_L: return ImGuiKey_L;
+        case XPLM_VK_M: return ImGuiKey_M;
+        case XPLM_VK_N: return ImGuiKey_N;
+        case XPLM_VK_O: return ImGuiKey_O;
+        case XPLM_VK_P: return ImGuiKey_P;
+        case XPLM_VK_Q: return ImGuiKey_Q;
+        case XPLM_VK_R: return ImGuiKey_R;
+        case XPLM_VK_S: return ImGuiKey_S;
+        case XPLM_VK_T: return ImGuiKey_T;
+        case XPLM_VK_U: return ImGuiKey_U;
+        case XPLM_VK_V: return ImGuiKey_V;
+        case XPLM_VK_W: return ImGuiKey_W;
+        case XPLM_VK_X: return ImGuiKey_X;
+        case XPLM_VK_Y: return ImGuiKey_Y;
+        case XPLM_VK_Z: return ImGuiKey_Z;
+
+        // Numbers 0-9
+        case XPLM_VK_0: return ImGuiKey_0;
+        case XPLM_VK_1: return ImGuiKey_1;
+        case XPLM_VK_2: return ImGuiKey_2;
+        case XPLM_VK_3: return ImGuiKey_3;
+        case XPLM_VK_4: return ImGuiKey_4;
+        case XPLM_VK_5: return ImGuiKey_5;
+        case XPLM_VK_6: return ImGuiKey_6;
+        case XPLM_VK_7: return ImGuiKey_7;
+        case XPLM_VK_8: return ImGuiKey_8;
+        case XPLM_VK_9: return ImGuiKey_9;
+
+        // Punctuation and Symbols
+        case XPLM_VK_EQUAL: return ImGuiKey_Equal;
+        case XPLM_VK_MINUS: return ImGuiKey_Minus;
+        case XPLM_VK_PERIOD: return ImGuiKey_Period;
+        case XPLM_VK_COMMA: return ImGuiKey_Comma;
+        case XPLM_VK_SLASH: return ImGuiKey_Slash;
+        case XPLM_VK_SEMICOLON: return ImGuiKey_Semicolon;
+        case XPLM_VK_QUOTE: return ImGuiKey_Apostrophe;
+        case XPLM_VK_BACKSLASH: return ImGuiKey_Backslash;
+        case XPLM_VK_LBRACE: return ImGuiKey_LeftBracket;
+        case XPLM_VK_RBRACE: return ImGuiKey_RightBracket;
+        case XPLM_VK_BACKQUOTE: return ImGuiKey_GraveAccent;
+
+        // Function Keys F1-F12
+        case XPLM_VK_F1: return ImGuiKey_F1;
+        case XPLM_VK_F2: return ImGuiKey_F2;
+        case XPLM_VK_F3: return ImGuiKey_F3;
+        case XPLM_VK_F4: return ImGuiKey_F4;
+        case XPLM_VK_F5: return ImGuiKey_F5;
+        case XPLM_VK_F6: return ImGuiKey_F6;
+        case XPLM_VK_F7: return ImGuiKey_F7;
+        case XPLM_VK_F8: return ImGuiKey_F8;
+        case XPLM_VK_F9: return ImGuiKey_F9;
+        case XPLM_VK_F10: return ImGuiKey_F10;
+        case XPLM_VK_F11: return ImGuiKey_F11;
+        case XPLM_VK_F12: return ImGuiKey_F12;
+    }
+    return ImGuiKey_None;
+}
+#endif /* IMGUI_V190_REFACTOR */
+
+// size of "frame" around a resizable window, by which its size can be changed
+constexpr int WND_RESIZE_LEFT_WIDTH     = 15;
+constexpr int WND_RESIZE_TOP_WIDTH      =  5;
+constexpr int WND_RESIZE_RIGHT_WIDTH    = 15;
+constexpr int WND_RESIZE_BOTTOM_WIDTH   = 15;
+
+static XPLMDataRef gVrEnabledRef        = nullptr;
+static XPLMDataRef gModelviewMatrixRef  = nullptr;
+static XPLMDataRef gViewportRef         = nullptr;
+static XPLMDataRef gProjectionMatrixRef = nullptr;
+static XPLMDataRef gFrameRatePeriodRef  = nullptr;
+
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+#endif
+
+std::shared_ptr<ImgFontAtlas> ImgWindow::sFontAtlas;
+ImgWindow* ImgWindow::s_CurrentBuildingWindow = nullptr;
+int ImgWindow::sBlankoutUntilCycle = 0;
+int ImgWindow::sTopMenuBarMargin = ImgWindow::kDefaultTopMenuBarMargin;
+int ImgWindow::sSystemTitleBarHeight = ImgWindow::kDefaultSystemTitleBarHeight;
+
+// Tracks textures pending destruction and the cycle they were queued
+static std::vector<std::pair<ImTextureID, int>> s_TexturesPendingDestruction;
+
+#ifdef IMGUI_V192_REFACTOR
+// Helper to safely rebuild the atlas if it gets dirty at runtime.
+// (IMPORTANT: This is required for ImGui v1.92+ since the font atlas is now self-managed, to preserve the semantics of XPLM windows created with ImgWindow on older versions of ImGui where the font atlas is shared across all such windows. This means it should "just work" to swap your legacy ImGui implementation for ImGui v1.92 or later, without having to change your code.)
+void CheckAndRebuildAtlas(ImFontAtlas* atlas, ImTextureID& textureID)
+{
+    if (!atlas) {
+        return;
+    }
+
+    // Honor "blankout" period, if any. (If so, skip rebuilding the atlas this frame.)
+    if (XPLMGetCycleNumber() < ImgWindow::sBlankoutUntilCycle) {
+        return;  // Skip checking/rebuilding this frame for now.
+    }
+    
+    // Check 1: Is the atlas dirty? (e.g. User added a dynamic font)
+    // Check 2: Is the texture missing? (e.g. X-Plane reloaded)
+    // Check 3: Is the last font unbaked? (e.g. Partial build)
+    bool need_rebuild = !atlas->TexIsBuilt;
+
+    // --- V1.92 STEALTH MODE LIFECYCLE FIX ---
+    // Because we are using a SHARED or per-window stealth atlas hidden from ImGui's automatic
+    // NewFrame() list, we manually trigger the synchronous CPU build and update the per-atlas
+    // frame state via atlas->Builder->FrameCount. Tracking per-atlas (rather than via a single
+    // global static int) guarantees that fallback per-window atlases and shared sFontAtlas
+    // instances never starve each other in the same X-Plane cycle, and monotonically advances
+    // even during pre-sim frames when XPLMGetCycleNumber() is still 0.
+    int currentFrame = XPLMGetCycleNumber();
+    int lastAtlasFrame = (atlas->Builder != nullptr) ? atlas->Builder->FrameCount : -1;
+    if (!atlas->TexIsBuilt || lastAtlasFrame < currentFrame) {
+        if (!atlas->TexIsBuilt) {
+            // Force ImGui to synchronously build the CPU texture buffers right now.
+            // Strip RendererHasTextures across all contexts bound to this atlas (since ImGui
+            // checks DrawListSharedDatas[0]->Context) so it preloads all glyph ranges, then restore.
+            ImGuiIO& curIo = ImGui::GetIO();
+            curIo.BackendFlags &= ~ImGuiBackendFlags_RendererHasTextures;
+            for (int i = 0; i < atlas->DrawListSharedDatas.Size; ++i) {
+                if (ImGuiContext* ctx = atlas->DrawListSharedDatas[i]->Context) {
+                    ctx->IO.BackendFlags &= ~ImGuiBackendFlags_RendererHasTextures;
+                }
+            }
+            extern void ImFontAtlasBuildMain(ImFontAtlas* atlas);
+            ImFontAtlasBuildMain(atlas);
+            for (int i = 0; i < atlas->DrawListSharedDatas.Size; ++i) {
+                if (ImGuiContext* ctx = atlas->DrawListSharedDatas[i]->Context) {
+                    ctx->IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+                }
+            }
+            curIo.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+        }
+
+        // Finally, clear the dirty lock and free old texture buffers from CPU memory.
+        int nextAtlasFrame = (currentFrame > lastAtlasFrame) ? currentFrame : (lastAtlasFrame + 1);
+        ImFontAtlasUpdateNewFrame(atlas, nextAtlasFrame, false);
+    }
+
+    // if (!need_rebuild && atlas->TexID.GetTexID()) {
+    //   if (!glIsTexture((GLuint)(uintptr_t)atlas->TexID.GetTexID())) need_rebuild = true;
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+    if (!need_rebuild) {
+        if (atlas->TexData == nullptr) {
+            need_rebuild = true;
+        } else if (ImgPanelGraphics::IsAvailable()) {
+            if ((void*)(intptr_t)atlas->TexData->GetTexRef().GetTexID() == nullptr) {
+                need_rebuild = true;
+            }
+        } else {
+            if ((GLuint)(uintptr_t)atlas->TexData->GetTexRef().GetTexID() == 0) {
+                need_rebuild = true;
+            }
+        }
+    }
+#else
+    if (!need_rebuild) {
+        if (atlas->TexData == nullptr) {
+            need_rebuild = true;
+        } else if ((GLuint)(uintptr_t)atlas->TexData->GetTexRef().GetTexID() == 0) {
+            need_rebuild = true;
+        }
+    }
+#endif
+
+    if (need_rebuild)
+    {
+        // 2. CPU Rasterize (RGBA32 for stability)
+        ImgFontAtlas::strct_texture_info outInfo;
+        ImgFontAtlas::GetCustomAtlasTextureData(atlas, outInfo);
+
+        // 3. GPU Upload & Link
+        if (outInfo.pixels && outInfo.width > 0 && outInfo.height > 0)
+        {
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+            if (ImgPanelGraphics::IsAvailable()) {
+                if (textureID != (ImTextureID)0) {
+                    ImgWindow::DeleteTexture(textureID);
+                }
+                
+                std::vector<unsigned char> lin_pixels(outInfo.pixels, outInfo.pixels + (outInfo.width * outInfo.height * 4));
+                
+                // N.B.: ImGui's font atlas generator can sometimes leave RGB values as black (0,0,0) in otherwise fully transparent areas.
+                // Because X-Plane Panel Graphics uses straight alpha blending, those black pixels would bleed into the semi-transparent,
+                // anti-aliased edges of the fonts, creating horrific muddy/black halos around the text.
+                // By forcing every pixel's RGB to pure white (255), we guarantee such textures act strictly as pure opacity masks,
+                // so the text color comes 100% from the vertex color.
+                // (This loop only runs ONCE when the font atlas is rebuilt, so the CPU cost is negligible. It does NOT run every frame!)
+                for (int i = 0; i < outInfo.width * outInfo.height; i++) {
+                    unsigned char* p = &lin_pixels[i * 4];
+                    p[0] = 255;
+                    p[1] = 255;
+                    p[2] = 255;
+                }
+                textureID = (ImTextureID)(intptr_t)ImgPanelGraphics::CreateTexture(lin_pixels.data(), outInfo.width, outInfo.height);
+                
+                // 4. Link
+                if (atlas->TexData) {
+                    atlas->TexData->SetTexID(textureID);
+                }
+                if (ImgWindow::sFontAtlas && ImgWindow::sFontAtlas->getAtlas() == atlas) {
+                    ImgWindow::sFontAtlas->updateTextureTracking(textureID);
+                }
+            } else
+#endif
+            {
+                // OpenGL fallback logic
+                GLuint glTextureID = (GLuint)(intptr_t)textureID;
+                if (glTextureID == 0 || !glIsTexture(glTextureID)) {
+                    int texNum = 0;
+                    XPLMGenerateTextureNumbers(&texNum, 1);
+                    glTextureID = (GLuint)texNum;
+                }
+
+                XPLMBindTexture2d((int)glTextureID, 0);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, outInfo.width, outInfo.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, outInfo.pixels);
+
+                // 4. Link
+                textureID = (ImTextureID)(intptr_t)glTextureID;
+                if (atlas->TexData) {
+                    atlas->TexData->SetTexID(textureID);
+                }
+                if (ImgWindow::sFontAtlas && ImgWindow::sFontAtlas->getAtlas() == atlas) {
+                    ImgWindow::sFontAtlas->updateTextureTracking(textureID);
+                }
+            }
+        }
+        // 5. Safely mark as built to prevent infinite rebuild loops.
+        // We only do this if we actually extracted valid pixels (meaning ImGui actually built it).
+        if (outInfo.pixels) {
+            atlas->TexIsBuilt = true;
+        }
+    }
+    else
+    {
+        if (atlas->TexData && atlas->TexData->GetTexRef().GetTexID() != 0)
+        {
+            ImTextureID currentAtlasId = (ImTextureID)atlas->TexData->GetTexRef().GetTexID();
+            if (textureID != currentAtlasId) {                
+                textureID = currentAtlasId; // Catch up to the active pipeline instantly!
+            }
+        }
+    }
+}
+#endif /* IMGUI_V192_REFACTOR */
+
+ImgWindow::ImgWindow(
+    int left,
+    int top,
+    int right,
+    int bottom,
+    XPLMWindowDecoration decoration,
+    XPLMWindowLayer layer,
+    bool cursors) :
+    mFirstRender(true),
+    mFontAtlas(sFontAtlas),
+    bHandleWndResize(xplm_WindowDecorationSelfDecoratedResizable == decoration),
+    mDecoration(decoration),
+    mPreferredLayer(layer),
+    bUseImgCursors(cursors)
+{
+#if _DEBUG
+    // Recommended by ImGui in imconfig.h:
+    // Check to make sure the current data structures this file is using are matching the ones imgui.cpp is using.
+    IMGUI_CHECKVERSION();
+#endif
+
+    // Note: GPU font texture binding is intentionally deferred until updateImgui() on the first
+    // draw callback so constructing an ImgWindow during XPluginStart / XPluginEnable never touches
+    // OpenGL or Panel Graphics before X-Plane enters an active drawing phase.
+    ImFontAtlas *iFontAtlas = mFontAtlas ? mFontAtlas->getAtlas() : nullptr;
+    mImGuiContext = ImGui::CreateContext(iFontAtlas);
+    ImGui::SetCurrentContext(mImGuiContext);
+    auto &io = ImGui::GetIO();
+
+#ifdef IMGUI_V192_REFACTOR
+    // Use "modern" self-managed font atlas to provide the same atlas semantics as the legacy code below, but in a way that is compatible with ImGui v1.92+.
+    // (IMPORTANT: the font atlas is shared across all XPLM windows created from ImgWindow or ImgWindow-derived classes.)
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+
+    // "Stealth Mode":
+    // Remove io.Fonts (both when using the shared sFontAtlas AND when sFontAtlas is nullptr and
+    // CreateContext allocated a per-window fallback atlas!) from the context's automatic update list.
+    // Leaving a fallback io.Fonts in mImGuiContext->FontAtlases caused ImGui::NewFrame() to run
+    // ImFontAtlasUpdateNewFrame(..., true) against our preloaded atlas, tripping assertions in
+    // imgui_draw.cpp (lines 2774 & 2788) in Debug builds.
+    if (io.Fonts) {
+        for (int i = 0; i < mImGuiContext->FontAtlases.Size; i++) {
+            if (mImGuiContext->FontAtlases[i] == io.Fonts) {
+                mImGuiContext->FontAtlases.erase(mImGuiContext->FontAtlases.Data + i);
+                break;
+            }
+        }
+    }
+#endif /* IMGUI_V192_REFACTOR */
+
+    static bool first_init=false;
+    if (!first_init) {
+        gVrEnabledRef = XPLMFindDataRef("sim/graphics/VR/enabled");
+        gModelviewMatrixRef = XPLMFindDataRef("sim/graphics/view/modelview_matrix");
+        gViewportRef = XPLMFindDataRef("sim/graphics/view/viewport");
+        gProjectionMatrixRef = XPLMFindDataRef("sim/graphics/view/projection_matrix");
+        gFrameRatePeriodRef = XPLMFindDataRef("sim/operation/misc/frame_rate_period");
+        first_init=true;
+    }
+
+#ifndef IMGUI_V192_REFACTOR
+#if !defined(IMGUI_VERSION_NUM) || (IMGUI_VERSION_NUM < 18000)
+#ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+    // we render ourselves, we don't use the DrawListsFunc
+    io.RenderDrawListsFn = nullptr;
+#endif
+#endif
+#endif /* IMGUI_V192_REFACTOR */
+
+#ifndef IMGUI_V190_REFACTOR
+    // set up the Keymap
+    io.KeyMap[ImGuiKey_Tab] = XPLM_VK_TAB;
+    io.KeyMap[ImGuiKey_LeftArrow] = XPLM_VK_LEFT;
+    io.KeyMap[ImGuiKey_RightArrow] = XPLM_VK_RIGHT;
+    io.KeyMap[ImGuiKey_UpArrow] = XPLM_VK_UP;
+    io.KeyMap[ImGuiKey_DownArrow] = XPLM_VK_DOWN;
+    io.KeyMap[ImGuiKey_PageUp] = XPLM_VK_PRIOR;
+    io.KeyMap[ImGuiKey_PageDown] = XPLM_VK_NEXT;
+    io.KeyMap[ImGuiKey_Home] = XPLM_VK_HOME;
+    io.KeyMap[ImGuiKey_End] = XPLM_VK_END;
+    io.KeyMap[ImGuiKey_Insert] = XPLM_VK_INSERT;
+    io.KeyMap[ImGuiKey_Delete] = XPLM_VK_DELETE;
+    io.KeyMap[ImGuiKey_Backspace] = XPLM_VK_BACK;
+    io.KeyMap[ImGuiKey_Space] = XPLM_VK_SPACE;
+    io.KeyMap[ImGuiKey_Enter] = XPLM_VK_RETURN;
+    io.KeyMap[ImGuiKey_Escape] = XPLM_VK_ESCAPE;
+    io.KeyMap[ImGuiKey_KeyPadEnter] = XPLM_VK_ENTER;
+    io.KeyMap[ImGuiKey_A] = XPLM_VK_A;
+    io.KeyMap[ImGuiKey_C] = XPLM_VK_C;
+    io.KeyMap[ImGuiKey_V] = XPLM_VK_V;
+    io.KeyMap[ImGuiKey_X] = XPLM_VK_X;
+    io.KeyMap[ImGuiKey_Y] = XPLM_VK_Y;
+    io.KeyMap[ImGuiKey_Z] = XPLM_VK_Z;
+#endif /* IMGUI_V190_REFACTOR */
+
+    // disable window rounding since we're not rendering the frame anyway.
+    auto &style = ImGui::GetStyle();
+    style.WindowRounding = 0;
+
+    // Note: Font atlas GPU texture upload (both for ImGui <= 1.91 and v1.92+, and both for shared
+    // sFontAtlas and fallback default io.Fonts) is handled lazily in updateImgui() on the first
+    // actual draw callback so early window construction never makes premature GPU calls.
+
+    // disable OSX-like keyboard behaviours always - we don't have the keymapping for it.
+    io.ConfigMacOSXBehaviors = false;
+
+#ifdef IMGUI_V190_REFACTOR
+    // override to enable the required OSX behaviors specifically for macOS only.
+#if defined(__APPLE__) || defined(__MACH__)
+    io.ConfigMacOSXBehaviors = true;
+#endif
+#endif /* IMGUI_V190_REFACTOR */
+
+    // try to inhibit a few resize/move behaviours that won't play nice with our window control.
+    io.ConfigWindowsResizeFromEdges = false;
+    io.ConfigWindowsMoveFromTitleBarOnly = true;
+
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+    if (ImgPanelGraphics::IsAvailable()) {
+#if defined(XPLM440)
+        XPLMCreateWindow_t windowParams = {};
+        windowParams.structSize = sizeof(XPLMCreateWindow_t);
+#else
+        SpoofedXPLMCreateWindow_t_440 windowParams = {};
+        windowParams.structSize = sizeof(SpoofedXPLMCreateWindow_t_440);
+#endif
+        windowParams.left = left;
+        windowParams.top = top;
+        windowParams.right = right;
+        windowParams.bottom = bottom;
+        windowParams.visible = 0;
+        windowParams.drawWindowFunc = DrawWindowCB;
+        windowParams.handleMouseClickFunc = HandleMouseClickCB;
+        windowParams.handleKeyFunc = HandleKeyFuncCB;
+        windowParams.handleCursorFunc = HandleCursorFuncCB;
+        windowParams.handleMouseWheelFunc = HandleMouseWheelFuncCB;
+        windowParams.refcon = reinterpret_cast<void*>(this);
+        windowParams.decorateAsFloatingWindow = decoration;
+        windowParams.layer = layer;
+        windowParams.handleRightClickFunc = HandleRightClickFuncCB;
+        windowParams.contentType = xplm_WindowContentTypePanelGraphics;
+        
+        mWindowID = XPLMCreateWindowEx(reinterpret_cast<XPLMCreateWindow_t*>(&windowParams));
+    } else 
+#endif
+    {
+        XPLMCreateWindow_t windowParams = {
+            sizeof(windowParams),
+            left,
+            top,
+            right,
+            bottom,
+            0,
+            DrawWindowCB,
+            HandleMouseClickCB,
+            HandleKeyFuncCB,
+            HandleCursorFuncCB,
+            HandleMouseWheelFuncCB,
+            reinterpret_cast<void*>(this),
+            decoration,
+            layer,
+            HandleRightClickFuncCB,
+        };
+        mWindowID = XPLMCreateWindowEx(&windowParams);
+    }
+
+    mBaselineWidth = right - left;
+    mBaselineHeight = top - bottom;
+
+#if defined(XPLM301)
+    // Initialize VR window geometry with the window's initial aspect ratio:
+    int winW = right - left;
+    int winH = top - bottom;
+    if (mWindowID && winW > 0 && winH > 0) {
+        XPLMSetWindowGeometryVR(mWindowID, winW, winH);
+    }
+#endif
+}
+
+ImgWindow::~ImgWindow()
+{
+    ImGui::SetCurrentContext(mImGuiContext);
+#ifdef IMGUI_V192_REFACTOR
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.Fonts)
+    {
+        if (mFontAtlas) {
+            // Shared ImgFontAtlas: detach THIS context's DrawListSharedData and sever io.Fonts
+            // so ImGui::DestroyContext does not destroy the shared atlas.
+            ImDrawListSharedData* data = ImGui::GetDrawListSharedData();
+            for (int i = 0; i < io.Fonts->DrawListSharedDatas.Size; i++)
+            {
+                if (io.Fonts->DrawListSharedDatas[i] == data) {
+                    io.Fonts->DrawListSharedDatas.erase(io.Fonts->DrawListSharedDatas.Data + i);
+                    break;
+                }
+            }
+            if (io.Fonts->RefCount > 0) {
+                io.Fonts->RefCount--;
+            }
+            io.Fonts = NULL;
+        } else {
+            // Private per-window fallback atlas (allocated by CreateContext(nullptr) when sFontAtlas
+            // was null): restore to FontAtlases so ImGui::DestroyContext -> ImGui::Shutdown() cleanly
+            // unregisters, unlocks, and deletes it with zero heap leaks or Locked assertions.
+            bool alreadyListed = false;
+            for (int i = 0; i < mImGuiContext->FontAtlases.Size; i++) {
+                if (mImGuiContext->FontAtlases[i] == io.Fonts) {
+                    alreadyListed = true;
+                    break;
+                }
+            }
+            if (!alreadyListed) {
+                mImGuiContext->FontAtlases.push_back(io.Fonts);
+            }
+        }
+    }
+#endif /* IMGUI_V192_REFACTOR */
+    if (!mFontAtlas) {
+        // if we didn't have an explicit font atlas, destroy the texture safely using our queue.
+        if (mFontTexture) {
+            ImgWindow::DeleteTexture(mFontTexture);
+        }
+    }
+    ImGui::DestroyContext(mImGuiContext);
+    XPLMDestroyWindow(mWindowID);
+}
+
+WindowGeometry
+WindowGeometry::Centered(int width, int height, XPLMWindowDecoration decoration)
+{
+    int sLeft = 0, sTop = 0, sRight = 0, sBottom = 0;
+    XPLMGetScreenBoundsGlobal(&sLeft, &sTop, &sRight, &sBottom);
+    int sWidth  = sRight - sLeft;
+    int effective_sTop = sTop - ImgWindow::GetTopMargin(decoration);
+    int sHeight = effective_sTop - sBottom;
+
+    int l = sLeft + (sWidth - width) / 2;
+    int b = sBottom + (sHeight - height) / 2;
+    return WindowGeometry(l, b + height, l + width, b);
+}
+
+WindowGeometry
+WindowGeometry::Sanitize(
+    int l, int t, int r, int b,
+    int defaultW, int defaultH,
+    int minVisibleMargin,
+    WindowSanitizeMode mode,
+    XPLMWindowDecoration decoration)
+{
+    if (mode == WindowSanitizeMode::None) {
+        return WindowGeometry(l, t, r, b);
+    }
+
+    XPLMDataRef vrRef = XPLMFindDataRef("sim/graphics/VR/enabled");
+    if (vrRef && XPLMGetDatai(vrRef)) {
+        int w = r - l;
+        int h = t - b;
+        if (w <= 0) w = defaultW;
+        if (h <= 0) h = defaultH;
+        return WindowGeometry(0, h, w, 0);
+    }
+
+    int w = r - l;
+    int h = t - b;
+    if (w <= 0 || h <= 0) {
+        return Centered(defaultW > 0 ? defaultW : 640, defaultH > 0 ? defaultH : 480, decoration);
+    }
+
+    int sLeft = 0, sTop = 0, sRight = 0, sBottom = 0;
+    XPLMGetScreenBoundsGlobal(&sLeft, &sTop, &sRight, &sBottom);
+    const int effective_sTop = sTop - ImgWindow::GetTopMargin(decoration);
+
+    int interLeft   = (std::max)(l, sLeft);
+    int interRight  = (std::min)(r, sRight);
+    int interBottom = (std::max)(b, sBottom);
+    int interTop    = (std::min)(t, effective_sTop);
+
+    int interW = interRight - interLeft;
+    int interH = interTop - interBottom;
+
+    if (interW <= 0 || interH <= 0) {
+        return Centered(w > 0 ? w : defaultW, h > 0 ? h : defaultH, decoration);
+    }
+
+    if (mode == WindowSanitizeMode::SnapToCenter) {
+        if (interW < w || interH < h) {
+            return Centered(w, h, decoration);
+        }
+        return WindowGeometry(l, t, r, b);
+    }
+
+    if (interW >= minVisibleMargin && interH >= minVisibleMargin && t <= effective_sTop) {
+        return WindowGeometry(l, t, r, b);
+    }
+
+    int newL = l, newT = t, newR = r, newB = b;
+    if (newR < sLeft + minVisibleMargin) {
+        newL = sLeft + minVisibleMargin - w;
+        newR = sLeft + minVisibleMargin;
+    }
+    if (newL > sRight - minVisibleMargin) {
+        newL = sRight - minVisibleMargin;
+        newR = newL + w;
+    }
+    if (newT < sBottom + minVisibleMargin) {
+        newB = sBottom + minVisibleMargin - h;
+        newT = sBottom + minVisibleMargin;
+    }
+    if (newB > effective_sTop - minVisibleMargin) {
+        newB = effective_sTop - minVisibleMargin;
+        newT = newB + h;
+    }
+    if (newT > effective_sTop) {
+        newT = effective_sTop;
+        newB = newT - h;
+    }
+
+    return WindowGeometry(newL, newT, newR, newB);
+}
+
+void
+ImgWindow::GetCurrentWindowGeometry (int& left, int& top, int& right, int& bottom) const
+{
+    if (IsPoppedOut())
+        GetWindowGeometryOS(left, top, right, bottom);
+    else if (IsInVR()) {
+        left = bottom = 0;
+        GetWindowGeometryVR(right, top);
+    } else {
+        GetWindowGeometry(left, top, right, bottom);
+    }
+}
+
+void
+ImgWindow::SetWindowResizingLimits (int minW, int minH, int maxW, int maxH)
+{
+    minWidth  = minW;
+    minHeight = minH;
+    maxWidth  = maxW;
+    maxHeight = maxH;
+    XPLMSetWindowResizingLimits(mWindowID, minW, minH, maxW, maxH);
+}
+
+void
+ImgWindow::ConvertSizeForScale (int cur_w, int cur_h, float from_scale, float to_scale, int& out_w, int& out_h,
+                                int chrome_w, int chrome_h)
+{
+    if (from_scale <= 0.001f || to_scale <= 0.001f) {
+        out_w = cur_w;
+        out_h = cur_h;
+        return;
+    }
+    float ratio = to_scale / from_scale;
+    int scalable_w = (std::max)(0, cur_w - chrome_w);
+    int scalable_h = (std::max)(0, cur_h - chrome_h);
+    out_w = chrome_w + (int)std::round((float)scalable_w * ratio);
+    out_h = chrome_h + (int)std::round((float)scalable_h * ratio);
+}
+
+bool
+ImgWindow::IsSimulatorFullScreen()
+{
+#if defined(XPLM300)
+    int fullScreenMonitors = 0;
+    XPLMGetAllMonitorBoundsGlobal([](int /*inMonitorIndex*/, int /*inLeftBx*/, int /*inTopBx*/, int /*inRightBx*/, int /*inBottomBx*/, void* inRefcon) {
+        if (inRefcon) (*static_cast<int*>(inRefcon))++;
+    }, &fullScreenMonitors);
+    return fullScreenMonitors > 0;
+#else
+    return true;
+#endif
+}
+
+void
+ImgWindow::ClampGeometryToScreen(
+    int& in_out_l, int& in_out_t, int& in_out_r, int& in_out_b,
+    int min_w, int min_h, int max_w, int max_h,
+    int top_margin)
+{
+    int sLeft = 0, sTop = 0, sRight = 0, sBottom = 0;
+    XPLMGetScreenBoundsGlobal(&sLeft, &sTop, &sRight, &sBottom);
+
+    const int topMargin = (top_margin >= 0) ? top_margin : GetTopMargin(xplm_WindowDecorationRoundRectangle);
+    const int effective_sTop = sTop - topMargin;
+
+    int req_w = std::abs(in_out_r - in_out_l);
+    int req_h = std::abs(in_out_t - in_out_b);
+
+    int avail_w = sRight - sLeft;
+    int avail_h = effective_sTop - sBottom;
+
+    if (avail_w > 0 && req_w > avail_w) req_w = avail_w;
+    if (avail_h > 0 && req_h > avail_h) req_h = avail_h;
+
+    if (min_w > 0 && req_w < min_w) req_w = (std::min)(min_w, avail_w);
+    if (max_w > 0 && req_w > max_w) req_w = max_w;
+    if (min_h > 0 && req_h < min_h) req_h = (std::min)(min_h, avail_h);
+    if (max_h > 0 && req_h > max_h) req_h = max_h;
+
+    int new_l = in_out_l;
+    int new_t = in_out_t;
+
+    // 1. Clamp top bound below system menu bar
+    if (new_t > effective_sTop) {
+        new_t = effective_sTop;
+    }
+    int new_b = new_t - req_h;
+
+    // 2. If bottom overflows below screen, push window up
+    if (new_b < sBottom) {
+        int overflow = sBottom - new_b;
+        new_t = (std::min)(new_t + overflow, effective_sTop);
+        new_b = new_t - req_h;
+        if (new_b < sBottom) {
+            new_b = sBottom;
+            req_h = new_t - new_b;
+        }
+    }
+
+    // 3. Clamp left bound
+    if (new_l < sLeft) {
+        new_l = sLeft;
+    }
+    int new_r = new_l + req_w;
+
+    // 4. If right overflows past screen right, push window left
+    if (new_r > sRight) {
+        int overflow = new_r - sRight;
+        new_l = (std::max)(new_l - overflow, sLeft);
+        new_r = new_l + req_w;
+        if (new_r > sRight) {
+            new_r = sRight;
+            req_w = new_r - new_l;
+        }
+    }
+
+    in_out_l = new_l;
+    in_out_t = new_t;
+    in_out_r = new_r;
+    in_out_b = new_b;
+}
+
+namespace {
+struct OSMonitorRect {
+    int l = 0, t = 0, r = 0, b = 0;
+    int minX() const { return (std::min)(l, r); }
+    int maxX() const { return (std::max)(l, r); }
+    int minY() const { return (std::min)(t, b); }
+    int maxY() const { return (std::max)(t, b); }
+};
+
+struct FindBestOSMonitorCtx {
+    int winMinX, winMinY, winMaxX, winMaxY;
+    long long bestOverlap = -1;
+    long long bestDistSq = 0;
+    long long bestArea = -1;
+    OSMonitorRect bestMon{};
+    bool found = false;
+};
+} // namespace
+
+bool
+ImgWindow::ApplyBoxelSizeToPoppedOutOS (int target_boxel_w, int target_boxel_h)
+{
+    if (!mWindowID || !IsPoppedOut())
+        return false;
+
+    int bl = 0, bt = 0, br = 0, bb = 0;
+    GetWindowGeometry(bl, bt, br, bb);
+    const int bx_w = br - bl;
+    const int bx_h = bt - bb;
+
+    int ol = 0, ot = 0, or_ = 0, ob = 0;
+    GetWindowGeometryOS(ol, ot, or_, ob);
+    const int os_w = std::abs(or_ - ol);
+    const int os_h = std::abs(ot - ob);
+    if (bx_w <= 0 || bx_h <= 0 || os_w <= 0 || os_h <= 0)
+        return false;
+
+    const double px_per_bx_x = static_cast<double>(os_w) / static_cast<double>(bx_w);
+    const double px_per_bx_y = static_cast<double>(os_h) / static_cast<double>(bx_h);
+
+    const int clamped_bx_w = ImClamp(target_boxel_w, minWidth, maxWidth);
+    const int clamped_bx_h = ImClamp(target_boxel_h, minHeight, maxHeight);
+
+    int new_os_w = (std::max)(1, static_cast<int>(std::round(static_cast<double>(clamped_bx_w) * px_per_bx_x)));
+    int new_os_h = (std::max)(1, static_cast<int>(std::round(static_cast<double>(clamped_bx_h) * px_per_bx_y)));
+
+    const bool y_down = (ob >= ot);
+
+    const int winMinX = (std::min)(ol, or_);
+    const int winMaxX = (std::max)(ol, or_);
+    const int winMinY = (std::min)(ot, ob);
+    const int winMaxY = (std::max)(ot, ob);
+
+    int new_l = winMinX;
+    int new_t = ot;
+
+#if defined(XPLM300)
+    FindBestOSMonitorCtx ctx{winMinX, winMinY, winMaxX, winMaxY};
+    XPLMGetAllMonitorBoundsOS([](int /*idx*/, int inL, int inT, int inR, int inB, void* refcon) {
+        auto* c = static_cast<FindBestOSMonitorCtx*>(refcon);
+        OSMonitorRect mon{inL, inT, inR, inB};
+        const int ix0 = (std::max)(c->winMinX, mon.minX());
+        const int iy0 = (std::max)(c->winMinY, mon.minY());
+        const int ix1 = (std::min)(c->winMaxX, mon.maxX());
+        const int iy1 = (std::min)(c->winMaxY, mon.maxY());
+        const long long overlap = (ix1 > ix0 && iy1 > iy0)
+            ? static_cast<long long>(ix1 - ix0) * static_cast<long long>(iy1 - iy0)
+            : 0;
+        const int cx = (c->winMinX + c->winMaxX) / 2;
+        const int cy = (c->winMinY + c->winMaxY) / 2;
+        const long long dx = (cx < mon.minX()) ? (mon.minX() - cx) : ((cx > mon.maxX()) ? (cx - mon.maxX()) : 0);
+        const long long dy = (cy < mon.minY()) ? (mon.minY() - cy) : ((cy > mon.maxY()) ? (cy - mon.maxY()) : 0);
+        const long long distSq = dx * dx + dy * dy;
+        const long long area = static_cast<long long>(mon.maxX() - mon.minX())
+                             * static_cast<long long>(mon.maxY() - mon.minY());
+        if (!c->found ||
+            overlap > c->bestOverlap ||
+            (overlap == c->bestOverlap && distSq < c->bestDistSq) ||
+            (overlap == c->bestOverlap && distSq == c->bestDistSq && area > c->bestArea)) {
+            c->found = true;
+            c->bestOverlap = overlap;
+            c->bestDistSq = distSq;
+            c->bestArea = area;
+            c->bestMon = mon;
+        }
+    }, &ctx);
+
+    if (ctx.found) {
+        const int monMinX = ctx.bestMon.minX();
+        const int monMaxX = ctx.bestMon.maxX();
+        const int monMinY = ctx.bestMon.minY();
+        const int monMaxY = ctx.bestMon.maxY();
+        const int avail_w = monMaxX - monMinX;
+        const int avail_h = monMaxY - monMinY;
+        if (avail_w > 0 && new_os_w > avail_w) new_os_w = avail_w;
+        if (avail_h > 0 && new_os_h > avail_h) new_os_h = avail_h;
+
+        if (new_l < monMinX) new_l = monMinX;
+        if (new_l + new_os_w > monMaxX) new_l = (std::max)(monMinX, monMaxX - new_os_w);
+
+        if (y_down) {
+            if (new_t < monMinY) new_t = monMinY;
+            if (new_t + new_os_h > monMaxY) new_t = (std::max)(monMinY, monMaxY - new_os_h);
+        } else {
+            if (new_t > monMaxY) new_t = monMaxY;
+            if (new_t - new_os_h < monMinY) new_t = (std::min)(monMaxY, monMinY + new_os_h);
+        }
+    }
+#endif
+
+    const int new_r = new_l + new_os_w;
+    const int new_b = y_down ? (new_t + new_os_h) : (new_t - new_os_h);
+    SetWindowGeometryOS(new_l, new_t, new_r, new_b);
+    return true;
+}
+
+bool
+ImgWindow::ScaleWindowGeometry (float from_scale, float to_scale, bool avoidMenuBarConflict)
+{
+    if (from_scale <= 0.001f || to_scale <= 0.001f || !mWindowID)
+        return false;
+
+    float ratio = to_scale / from_scale;
+    if (std::abs(ratio - 1.0f) < 0.0001f)
+        return true;
+
+    if (IsInVR()) {
+        int cur_w = 0, cur_h = 0;
+        GetWindowGeometryVR(cur_w, cur_h);
+        if (cur_w <= 0 || cur_h <= 0) return false;
+
+        int scalable_w = (std::max)(0, cur_w - mChromeWidth);
+        int scalable_h = (std::max)(0, cur_h - mChromeHeight);
+
+        int new_w = mChromeWidth  + (int)std::round((float)scalable_w * ratio);
+        int new_h = mChromeHeight + (int)std::round((float)scalable_h * ratio);
+
+        new_w = ImClamp(new_w, minWidth, maxWidth);
+        new_h = ImClamp(new_h, minHeight, maxHeight);
+
+        SetWindowGeometryVR(new_w, new_h);
+        return true;
+    }
+
+    if (IsPoppedOut()) {
+        int l = 0, t = 0, r = 0, b = 0;
+        GetWindowGeometry(l, t, r, b);
+        const int bx_w = r - l;
+        const int bx_h = t - b;
+        if (bx_w <= 0 || bx_h <= 0) return false;
+
+        const int scalable_w = (std::max)(0, bx_w - mChromeWidth);
+        const int scalable_h = (std::max)(0, bx_h - mChromeHeight);
+        const int target_bx_w = mChromeWidth  + static_cast<int>(std::round(static_cast<float>(scalable_w) * ratio));
+        const int target_bx_h = mChromeHeight + static_cast<int>(std::round(static_cast<float>(scalable_h) * ratio));
+        return ApplyBoxelSizeToPoppedOutOS(target_bx_w, target_bx_h);
+    }
+
+    // Standard in-simulator 2D window:
+    int l = 0, t = 0, r = 0, b = 0;
+    GetWindowGeometry(l, t, r, b);
+    int cur_w = r - l;
+    int cur_h = t - b;
+    if (cur_w <= 0 || cur_h <= 0) return false;
+
+    int scalable_w = (std::max)(0, cur_w - mChromeWidth);
+    int scalable_h = (std::max)(0, cur_h - mChromeHeight);
+
+    int new_w = mChromeWidth  + (int)std::round((float)scalable_w * ratio);
+    int new_h = mChromeHeight + (int)std::round((float)scalable_h * ratio);
+
+    int new_l = l;
+    int new_t = t;
+    int new_r = new_l + new_w;
+    int new_b = new_t - new_h;
+
+    int top_margin = avoidMenuBarConflict ? GetEffectiveTopMargin() : 0;
+    ClampGeometryToScreen(new_l, new_t, new_r, new_b, minWidth, minHeight, maxWidth, maxHeight, top_margin);
+
+    SetWindowGeometry(new_l, new_t, new_r, new_b);
+    return true;
+}
+
+bool
+ImgWindow::ResizeToScale (float target_scale, float baseline_scale, bool avoidMenuBarConflict)
+{
+    if (target_scale <= 0.001f || baseline_scale <= 0.001f || !mWindowID)
+        return false;
+
+    if (mBaselineWidth > 0 && mBaselineHeight > 0) {
+        float effective_scale = target_scale / baseline_scale;
+        int scalable_base_w = (std::max)(0, mBaselineWidth - mChromeWidth);
+        int scalable_base_h = (std::max)(0, mBaselineHeight - mChromeHeight);
+        int target_w = mChromeWidth  + (int)std::round((float)scalable_base_w * effective_scale);
+        int target_h = mChromeHeight + (int)std::round((float)scalable_base_h * effective_scale);
+
+        if (IsInVR()) {
+            target_w = ImClamp(target_w, minWidth, maxWidth);
+            target_h = ImClamp(target_h, minHeight, maxHeight);
+            SetWindowGeometryVR(target_w, target_h);
+            return true;
+        }
+
+        if (IsPoppedOut()) {
+            return ApplyBoxelSizeToPoppedOutOS(target_w, target_h);
+        }
+
+        int l = 0, t = 0, r = 0, b = 0;
+        GetWindowGeometry(l, t, r, b);
+        int new_l = l;
+        int new_t = t;
+        int new_r = new_l + target_w;
+        int new_b = new_t - target_h;
+
+        int top_margin = avoidMenuBarConflict ? GetEffectiveTopMargin() : 0;
+        ClampGeometryToScreen(new_l, new_t, new_r, new_b, minWidth, minHeight, maxWidth, maxHeight, top_margin);
+
+        SetWindowGeometry(new_l, new_t, new_r, new_b);
+        return true;
+    }
+
+    return ScaleWindowGeometry(baseline_scale, target_scale, avoidMenuBarConflict);
+}
+
+void
+ImgWindow::updateMatrices()
+{
+    // Get the current modelview matrix, viewport, and projection matrix from X-Plane
+    XPLMGetDatavf(gModelviewMatrixRef, mModelView, 0, 16);
+    XPLMGetDatavf(gProjectionMatrixRef, mProjection, 0, 16);
+    XPLMGetDatavi(gViewportRef, mViewport, 0, 4);
+}
+
+static void multMatrixVec4f(GLfloat dst[4], const GLfloat m[16], const GLfloat v[4])
+{
+    dst[0] = v[0] * m[0] + v[1] * m[4] + v[2] * m[8] + v[3] * m[12];
+    dst[1] = v[0] * m[1] + v[1] * m[5] + v[2] * m[9] + v[3] * m[13];
+    dst[2] = v[0] * m[2] + v[1] * m[6] + v[2] * m[10] + v[3] * m[14];
+    dst[3] = v[0] * m[3] + v[1] * m[7] + v[2] * m[11] + v[3] * m[15];
+}
+
+void
+ImgWindow::boxelsToNative(int x, int y, int &outX, int &outY)
+{
+    GLfloat boxelPos[4] = { (GLfloat)x, (GLfloat)y, 0, 1 };
+    GLfloat eye[4], ndc[4];
+
+    multMatrixVec4f(eye, mModelView, boxelPos);
+    multMatrixVec4f(ndc, mProjection, eye);
+    ndc[3] = 1.0f / ndc[3];
+    ndc[0] *= ndc[3];
+    ndc[1] *= ndc[3];
+
+    outX = static_cast<int>((ndc[0] * 0.5f + 0.5f) * mViewport[2] + mViewport[0]);
+    outY = static_cast<int>((ndc[1] * 0.5f + 0.5f) * mViewport[3] + mViewport[1]);
+}
+
+static void LogBackendOnce(bool isPanelGraphics, const char* reason = nullptr)
+{
+    static bool s_logged = false;
+    if (s_logged) return;
+    s_logged = true;
+
+    char pluginName[256] = {0};
+    XPLMPluginID myID = XPLMGetMyID();
+    if (myID != XPLM_NO_PLUGIN_ID) {
+        XPLMGetPluginInfo(myID, pluginName, nullptr, nullptr, nullptr);
+    }
+
+    char buf[512];
+    const char* namePrefix = (pluginName[0] != '\0') ? pluginName : "Unknown Plugin";
+
+    if (isPanelGraphics) {
+        snprintf(buf, sizeof(buf), "ImgWindow v%s: [%s] using Panel Graphics for ImGui rendering.\n",
+                 IMGWINDOW_VERSION, namePrefix);
+    } else if (reason && reason[0] != '\0') {
+        snprintf(buf, sizeof(buf), "ImgWindow v%s: [%s] using OpenGL for ImGui rendering (%s).\n",
+                 IMGWINDOW_VERSION, namePrefix, reason);
+    } else {
+        snprintf(buf, sizeof(buf), "ImgWindow v%s: [%s] using OpenGL for ImGui rendering.\n",
+                 IMGWINDOW_VERSION, namePrefix);
+    }
+    XPLMDebugString(buf);
+}
+
+void
+ImgWindow::RenderImGui(ImDrawData *draw_data)
+{
+    // Implement a mechanism to hold off on rendering any frames (across all windows) when sBlankoutUntilCycle is set to a future cycle number.
+    // (This can be very useful to avoid flicker during a reload of one or more windows that have lots of fonts that need to be loaded.  Setting this to XPLMCycleNumber() + 4 is a nice middle ground to ensure smooth, flicker-free reloads.)
+    if (XPLMGetCycleNumber() < ImgWindow::sBlankoutUntilCycle) {
+        return;  // Skip rendering this frame.
+    }
+
+    // Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.DisplayFramebufferScale.x != 1.0 ||
+        io.DisplayFramebufferScale.y != 1.0)
+        draw_data->ScaleClipRects(io.DisplayFramebufferScale);
+
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+    if (ImgPanelGraphics::IsAvailable()) {
+        LogBackendOnce(true);
+
+        if (mFontTexture == (ImTextureID)0 || draw_data->CmdListsCount == 0)
+            return;
+
+        int left, top, right, bottom;
+        XPLMGetWindowGeometry(mWindowID, &left, &top, &right, &bottom);
+
+        // Flip the coordinate system vertically to match ImGui's origin at the top-left corner.
+        ImgPanelGraphics::TransformPush();
+        ImgPanelGraphics::TransformTranslate((float)left, (float)top);
+        ImgPanelGraphics::TransformScale(1.0f, -1.0f);
+
+        // Render command lists
+        for (int n = 0; n < draw_data->CmdListsCount; n++)
+        {
+            const ImDrawList* cmd_list = draw_data->CmdLists[n];
+
+            XPLMMesh_t mesh;
+            mesh.vertex_count = cmd_list->VtxBuffer.Size;
+            mesh.vertices = (const float*)cmd_list->VtxBuffer.Data;
+            mesh.index_count = cmd_list->IdxBuffer.Size;
+            static_assert(sizeof(ImDrawIdx) == 2, "X-Plane 12 Panel Graphics API strictly requires 16-bit ImGui indices.");
+            mesh.indices = (const uint16_t*)cmd_list->IdxBuffer.Data;
+            
+            std::vector<XPLMDrawCall_t> draw_calls;
+            draw_calls.reserve(cmd_list->CmdBuffer.Size);
+
+            for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
+            {
+                const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+                if (pcmd->UserCallback != nullptr) {
+                    if (pcmd->UserCallback == ImDrawCallback_ResetRenderState) {
+                        // Safely ignore ImGui's internal render state reset request
+                        continue; 
+                    }
+                    if (!draw_calls.empty()) {
+                        ImgPanelGraphics::DrawCalls(&mesh, static_cast<int>(draw_calls.size()), draw_calls.data());
+                        draw_calls.clear();
+                    }
+                    pcmd->UserCallback(cmd_list, pcmd);
+                } else {
+                    XPLMDrawCall_t dc;
+#ifndef IMGUI_V192_REFACTOR
+                    dc.tex_ref = (void*)(intptr_t)pcmd->TextureId;
+#else
+                    dc.tex_ref = (void*)(intptr_t)(pcmd->TexRef._TexData ? pcmd->TexRef._TexData->TexID : pcmd->TexRef._TexID);
+#endif
+                    
+                    // CRITICAL GUARD: Vulkan will segfault if tex_ref is null.
+                    if (dc.tex_ref == nullptr) {
+                        continue;
+                    }
+
+                    dc.scissors[0] = pcmd->ClipRect.x;
+                    dc.scissors[1] = pcmd->ClipRect.y;
+                    dc.scissors[2] = pcmd->ClipRect.z;
+                    dc.scissors[3] = pcmd->ClipRect.w;
+                    dc.idx_offset = pcmd->IdxOffset;
+                    dc.element_count = pcmd->ElemCount;
+                    dc.vtx_offset = pcmd->VtxOffset;
+                    draw_calls.push_back(dc);
+                }
+            }
+            
+            if (!draw_calls.empty()) {
+                ImgPanelGraphics::DrawCalls(&mesh, static_cast<int>(draw_calls.size()), draw_calls.data());
+            }
+        }
+        
+        ImgPanelGraphics::TransformPop();
+    } else {
+        LogBackendOnce(false, ImgPanelGraphics::GetFallbackReason());
+#else
+    {
+        LogBackendOnce(false);
+#endif
+    updateMatrices();
+
+    // We are using the OpenGL fixed pipeline because messing with the
+    // shader-state in X-Plane is not very well documented, but using the fixed
+    // function pipeline is.
+
+    // 1TU + Alpha settings, no depth, no fog.
+    XPLMSetGraphicsState(0, 1, 0, 1, 1, 0, 0);
+    glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS);
+    glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_TRANSFORM_BIT);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_SCISSOR_TEST);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glEnableClientState(GL_COLOR_ARRAY);
+    glEnable(GL_TEXTURE_2D);
+
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glScalef(1.0f, -1.0f, 1.0f);
+    glTranslatef(static_cast<GLfloat>(mLeft), static_cast<GLfloat>(-mTop), 0.0f);
+
+    // Render command lists
+    for (int n = 0; n < draw_data->CmdListsCount; n++)
+    {
+        const ImDrawList* cmd_list = draw_data->CmdLists[n];
+        const ImDrawVert* vtx_buffer = cmd_list->VtxBuffer.Data;
+        const ImDrawIdx* idx_buffer = cmd_list->IdxBuffer.Data;
+#ifndef IMGUI_V192_REFACTOR
+        glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + IM_OFFSETOF(ImDrawVert, pos)));
+        glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + IM_OFFSETOF(ImDrawVert, uv)));
+        glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + IM_OFFSETOF(ImDrawVert, col)));
+#else /* IMGUI_V192_REFACTOR: */
+        glVertexPointer(2, GL_FLOAT, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, pos)));
+        glTexCoordPointer(2, GL_FLOAT, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, uv)));
+        glColorPointer(4, GL_UNSIGNED_BYTE, sizeof(ImDrawVert), (const GLvoid*)((const char*)vtx_buffer + offsetof(ImDrawVert, col)));
+#endif /* IMGUI_V192_REFACTOR */
+
+        for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
+        {
+            const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+            if (pcmd->UserCallback != nullptr) {
+                if (pcmd->UserCallback == ImDrawCallback_ResetRenderState) {
+                    // Safely ignore ImGui's internal render state reset request
+                    continue; 
+                }
+                pcmd->UserCallback(cmd_list, pcmd);
+            } else {
+#ifndef IMGUI_V192_REFACTOR
+                XPLMBindTexture2d((int)(intptr_t)pcmd->TextureId, 0);
+#else
+                XPLMBindTexture2d((int)(intptr_t)(pcmd->TexRef._TexData ? pcmd->TexRef._TexData->TexID : pcmd->TexRef._TexID), 0);
+#endif
+
+                // Scissors work in viewport space - must translate the coordinates from ImGui -> Boxels, then Boxels -> Native.
+                //FIXME: it must be possible to apply the scale+transform manually to the projection matrix so we don't need to doublestep.
+                int bTop, bLeft, bRight, bBottom;
+                translateImguiToBoxel(pcmd->ClipRect.x, pcmd->ClipRect.y, bLeft, bTop);
+                translateImguiToBoxel(pcmd->ClipRect.z, pcmd->ClipRect.w, bRight, bBottom);
+                int nTop, nLeft, nRight, nBottom;
+                boxelsToNative(bLeft, bTop, nLeft, nTop);
+                boxelsToNative(bRight, bBottom, nRight, nBottom);
+                glScissor(nLeft, nBottom, nRight-nLeft, nTop-nBottom);
+                glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer);
+            }
+            idx_buffer += pcmd->ElemCount;
+        }
+    }
+
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    // Restore modified state
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+    glBindTexture(GL_TEXTURE_2D, 0);    // fix from Mark Parker 2026
+    glPopAttrib();
+    glPopClientAttrib();
+    }
+}
+
+void
+ImgWindow::translateToImguiSpace(int inX, int inY, float &outX, float &outY)
+{
+    outX = static_cast<float>(inX - mLeft);
+    if (outX < 0.0f || outX > (float)(mRight - mLeft)) {
+        outX = -FLT_MAX;
+        outY = -FLT_MAX;
+        return;
+    }
+    outY = static_cast<float>(mTop-inY);
+    if (outY < 0.0f || outY > (float)(mTop - mBottom)) {
+        outX = -FLT_MAX;
+        outY = -FLT_MAX;
+        return;
+    }
+}
+
+void
+ImgWindow::translateImguiToBoxel(float inX, float inY, int &outX, int &outY)
+{
+    outX = (int)(mLeft + inX);
+    outY = (int)(mTop - inY);
+}
+
+bool
+ImgWindow::IsInSelfResizeBorder(int globalX, int globalY) const
+{
+    if (!IsInsideSim() || !bHandleWndResize) {
+        return false;
+    }
+    return (globalX <= (mLeft + WND_RESIZE_LEFT_WIDTH) ||
+            globalX >= (mRight - WND_RESIZE_RIGHT_WIDTH) ||
+            globalY >= (mTop - WND_RESIZE_TOP_WIDTH) ||
+            globalY <= (mBottom + WND_RESIZE_BOTTOM_WIDTH));
+}
+
+
+void
+ImgWindow::updateImgui()
+{
+    ImGui::SetCurrentContext(mImGuiContext);
+    auto &io = ImGui::GetIO();
+
+    // transfer the window geometry to ImGui
+    XPLMGetWindowGeometry(mWindowID, &mLeft, &mTop, &mRight, &mBottom);
+
+    float win_width = static_cast<float>(mRight - mLeft);
+    float win_height = static_cast<float>(mTop - mBottom);
+
+    // Needed to add this to prevent io.DeltaTime causing a CTD because when X-Plane starts FrameRatePeriod is equal to 0.0f
+    float FrameRatePeriod = XPLMGetDataf(gFrameRatePeriodRef);
+    if (FrameRatePeriod > 0.0f) {
+        io.DeltaTime = XPLMGetDataf(gFrameRatePeriodRef);
+    }
+    if (io.DeltaTime <= 0.0f) {
+        io.DeltaTime = 1.0f / 60.0f;  // ensure cursors blink and stuff
+    }
+    io.DisplaySize = ImVec2(win_width, win_height);
+    // in boxels, we're always scale 1, 1.
+    io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+
+    // Audit mouse cursor position and invalidate if cursor has left the window content area.
+    // This prevents "phantom stuck cursors" when the mouse exits into the sim, and cleanly
+    // invalidates hover states on blur or Alt-Tab.
+    if (!IsInVR()) {
+        int mouseX = 0, mouseY = 0;
+#if defined(XPLM300)
+        XPLMGetMouseLocationGlobal(&mouseX, &mouseY);
+#else
+        XPLMGetMouseLocation(&mouseX, &mouseY);
+#endif
+
+        const bool isWindowInFront = IsWindowInFront();
+        const bool isMouseInside = isWindowInFront && (mouseX >= mLeft && mouseX <= mRight &&
+                                                       mouseY >= mBottom && mouseY <= mTop);
+
+        const bool isInsideContent = isMouseInside && !IsInSelfResizeBorder(mouseX, mouseY);
+
+        if (!isInsideContent) {
+            if (bUseImgCursors) {
+                io.MouseDrawCursor = false;
+            }
+#ifdef IMGUI_V190_REFACTOR
+            io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+            io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        }
+    }
+
+    // Sync modifier key state with physical hardware state every frame.
+    // In X-Plane SDK, handleKeyFunc is only called when a virtual key is pressed or released,
+    // NEVER when a modifier key (Shift, Ctrl, Alt, Command) is pressed or released alone.
+    // Syncing with OS hardware state prevents "sticky Shift" / "sticky Ctrl" from corrupting
+    // mouse clicks into text edit fields (e.g. accidental range selection via Shift+Click).
+#if defined(__APPLE__) || defined(__MACH__)
+    CGEventFlags modFlags = CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
+    bool realShift = (modFlags & kCGEventFlagMaskShift) != 0;
+    bool realAlt   = (modFlags & kCGEventFlagMaskAlternate) != 0;
+    bool realCtrl  = (modFlags & kCGEventFlagMaskControl) != 0;
+    bool realSuper = (modFlags & kCGEventFlagMaskCommand) != 0;
+
+#ifdef IMGUI_V190_REFACTOR
+    io.AddKeyEvent(ImGuiMod_Shift, realShift);
+    io.AddKeyEvent(ImGuiMod_Alt,   realAlt);
+    io.AddKeyEvent(ImGuiMod_Super, realSuper || realCtrl);
+    io.AddKeyEvent(ImGuiMod_Ctrl,  false);
+#endif
+    io.KeyShift = realShift;
+    io.KeyAlt   = realAlt;
+    io.KeySuper = realSuper || realCtrl;
+    io.KeyCtrl  = false;
+#elif defined(_WIN32)
+    bool realShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool realCtrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool realAlt   = (GetKeyState(VK_MENU) & 0x8000) != 0;
+
+#ifdef IMGUI_V190_REFACTOR
+    io.AddKeyEvent(ImGuiMod_Shift, realShift);
+    io.AddKeyEvent(ImGuiMod_Ctrl,  realCtrl);
+    io.AddKeyEvent(ImGuiMod_Alt,   realAlt);
+#endif
+    io.KeyShift = realShift;
+    io.KeyCtrl  = realCtrl;
+    io.KeyAlt   = realAlt;
+#endif
+
+#ifdef IMGUI_V192_REFACTOR
+    // Just-in-time build & GPU upload (both for shared sFontAtlas and per-window fallback io.Fonts):
+    // If the ImGui client code added a font or scaled text since the last frame, or if this is the
+    // window's very first draw frame, build/upload synchronously before ImGui::NewFrame() runs.
+    ImFontAtlas* activeAtlas = (mFontAtlas && mFontAtlas->getAtlas()) ? mFontAtlas->getAtlas() : io.Fonts;
+    if (activeAtlas) {
+        CheckAndRebuildAtlas(activeAtlas, mFontTexture);
+    }
+#else
+    if (mFontAtlas) {
+        mFontAtlas->bindTexture();
+        if (io.Fonts && io.Fonts->TexID != (ImTextureID)0) {
+            mFontTexture = (ImTextureID)(intptr_t)io.Fonts->TexID;
+        }
+    } else if (io.Fonts && io.Fonts->TexID == (ImTextureID)0) {
+        // Lazily bind fallback per-window default font on first draw frame:
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+        if (ImgPanelGraphics::IsAvailable()) {
+            unsigned char *pixels = nullptr;
+            int width = 0, height = 0;
+            io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+            if (pixels && width > 0 && height > 0) {
+                std::vector<unsigned char> lin_pixels(pixels, pixels + (width * height * 4));
+                // Force RGB to pure white (255) so the texture acts strictly as a pure opacity mask:
+                for (int i = 0; i < width * height; i++) {
+                    unsigned char* p = &lin_pixels[i * 4];
+                    p[0] = 255;
+                    p[1] = 255;
+                    p[2] = 255;
+                }
+                mFontTexture = (ImTextureID)(intptr_t)ImgPanelGraphics::CreateTexture(lin_pixels.data(), width, height);
+                io.Fonts->SetTexID(mFontTexture);
+            }
+        } else
+#endif
+        {
+            unsigned char *pixels = nullptr;
+            int width = 0, height = 0;
+            io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
+            if (pixels && width > 0 && height > 0) {
+                int texNum = 0;
+                XPLMGenerateTextureNumbers(&texNum, 1);
+                mFontTexture = (ImTextureID)(intptr_t)texNum;
+
+                XPLMBindTexture2d((int)(intptr_t)mFontTexture, 0);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                glTexImage2D(GL_TEXTURE_2D,
+                             0,
+                             GL_ALPHA,
+                             width,
+                             height,
+                             0,
+                             GL_ALPHA,
+                             GL_UNSIGNED_BYTE,
+                             pixels);
+                io.Fonts->SetTexID(mFontTexture);
+            }
+        }
+    }
+#endif /* IMGUI_V192_REFACTOR */
+
+    // 1. Process deferred texture destruction safely at the start of a new frame
+    if (!s_TexturesPendingDestruction.empty()) {
+        int currentCycle = XPLMGetCycleNumber();
+        
+        s_TexturesPendingDestruction.erase(std::remove_if(s_TexturesPendingDestruction.begin(), s_TexturesPendingDestruction.end(), [currentCycle](const std::pair<ImTextureID, int>& item) {
+            // Only destroy if the cycle that queued it has completely finished
+            if (item.second < currentCycle) {
+#ifdef IMGWINDOW_USE_PANEL_GRAPHICS
+                if (ImgPanelGraphics::IsAvailable()) {
+                    ImgPanelGraphics::DestroyTexture((void*)(intptr_t)item.first);
+                } else
+#endif
+                {
+                    GLuint glTextureId = (GLuint)(intptr_t)item.first;
+                    glDeleteTextures(1, &glTextureId);
+                }
+                return true; // Delete from queue
+            }
+            return false; // Keep in queue for now
+        }), s_TexturesPendingDestruction.end());
+    }
+
+    ImGui::NewFrame();
+
+    // 1-Click Toolbar Buttons over Active InputText:
+    // If an InputText currently holds g.ActiveId and the user clicked outside its bounding rect,
+    // clear ActiveId early. In Dear ImGui, toolbars rendered before multiline text inputs in the
+    // frame sequence are blocked on the first click because ItemHoverable() rejects clicks while
+    // g.ActiveId belongs to the InputText. Clearing ActiveId early allows toolbar buttons (H1, B,
+    // tags, etc.) to trigger on the very first click without requiring a double-click.
+    ClearActiveInputTextIfClickedOutside();
+
+    // If mouse was clicked outside this window, release active mouse focus
+    if ((io.MouseClicked[0] || io.MouseClicked[1]) && bHasMouseFocus) {
+        if (io.MousePos.x < 0.0f || io.MousePos.x > win_width || io.MousePos.y < 0.0f || io.MousePos.y > win_height) {
+            bHasMouseFocus = false;
+        }
+    }
+
+    ImGui::SetNextWindowPos(ImVec2((float) 0.0, (float) 0.0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(win_width, win_height), ImGuiCond_Always);
+
+    // ...and construct the window, detecting whether the window flags allow moving via right-drag.
+    ImGuiWindowFlags_ userFlags = beforeBegin();
+    bCanMove = !(userFlags & ImGuiWindowFlags_NoMove);
+    ImGui::Begin(mWindowTitle.c_str(), nullptr, userFlags | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+    
+    // Set the static context hook before building so extensions can query this window
+    s_CurrentBuildingWindow = this;
+    buildInterface();
+    s_CurrentBuildingWindow = nullptr;
+    
+    ImGui::End();
+
+    // finally, handle window focus.
+    int hasKeyboardFocus = XPLMHasKeyboardFocus(mWindowID);
+
+#ifdef IMGUI_V190_REFACTOR
+    if (hasKeyboardFocus != bLastKeyboardFocused) {
+        bLastKeyboardFocused = hasKeyboardFocus;
+        io.AddFocusEvent(bLastKeyboardFocused != 0);
+    }
+#endif /* IMGUI_V190_REFACTOR */
+
+    bool wantFocus = io.WantTextInput || bExplicitKeyboardFocus || (bCaptureKeyboardOnMouseFocus && bHasMouseFocus);
+    if (wantFocus && !hasKeyboardFocus) {
+        XPLMTakeKeyboardFocus(mWindowID);
+    }
+    else if (!wantFocus && hasKeyboardFocus) {
+        XPLMTakeKeyboardFocus(nullptr);
+        // reset keysdown otherwise we'll think any keys used to defocus the keyboard are still down!
+#ifndef IMGUI_V190_REFACTOR
+        for (auto &key : io.KeysDown) {
+            key = false;
+        }
+#endif /* IMGUI_V190_REFACTOR */
+    }
+    mFirstRender = false;
+}
+
+void
+ImgWindow::DrawWindowCB(XPLMWindowID /* inWindowID */, void *inRefcon)
+{
+    auto *thisWindow = reinterpret_cast<ImgWindow *>(inRefcon);
+
+    // CRITICAL GUARD: Do not draw zombie windows that are queued for deletion!
+    if (thisWindow->mIsPendingDestruction) {
+        return;
+    }
+
+    thisWindow->updateImgui();
+
+    ImGui::SetCurrentContext(thisWindow->mImGuiContext);
+    ImGui::Render();
+
+    thisWindow->RenderImGui(ImGui::GetDrawData());
+
+    // Give subclasses a chance to do something after all rendering
+    thisWindow->afterRendering();
+
+    // Hack: Reset the Backspace key if in VR (see HandleKeyFuncCB for details)
+    if (thisWindow->bResetBackspace) {
+        ImGuiIO& io = ImGui::GetIO();
+#ifndef IMGUI_V190_REFACTOR
+        io.KeysDown[XPLM_VK_BACK] = false;
+#else
+        io.AddKeyEvent(ImGuiKey_Backspace, false);
+#endif /* IMGUI_V190_REFACTOR */
+        thisWindow->bResetBackspace = false;
+    }
+}
+
+int
+ImgWindow::HandleMouseClickCB(XPLMWindowID /* inWindowID */, int x, int y, XPLMMouseStatus inMouse, void *inRefcon)
+{
+    auto *thisWindow = reinterpret_cast<ImgWindow *>(inRefcon);
+
+    // If this is an overlay window that cannot be moved, ignore mouse clicks.
+    if (thisWindow->mPreferredLayer == xplm_WindowLayerFlightOverlay &&
+        !thisWindow->bCanMove)
+        return 0;    // (ignore mouse clicks in this case)
+
+    return thisWindow->HandleMouseClickGeneric(x, y, inMouse, 0);
+}
+
+int
+ImgWindow::HandleMouseClickGeneric(int x, int y, XPLMMouseStatus inMouse, int button)
+{
+    ImGui::SetCurrentContext(mImGuiContext);
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Compute local ImGui coordinates without committing them to ImGuiIO yet so clicks/drags
+    // claimed by the outer self-resize border never leak onto edge-aligned ImGui widgets
+    // (such as a vertical scrollbar sitting flush against the right window border).
+    float localPosX = -FLT_MAX, localPosY = -FLT_MAX;
+    translateToImguiSpace(x, y, localPosX, localPosY);
+    const int loc_x = (localPosX == -FLT_MAX) ? -1 : int(localPosX);
+    const int loc_y = (localPosY == -FLT_MAX) ? -1 : int(localPosY);
+    const int dx = x - lastMouseDragX;          // dragged how far since last down/drag event?
+    const int dy = y - lastMouseDragY;
+
+    switch (inMouse) {
+
+        case xplm_MouseDrag:
+            if (!(button == 0 && dragWhat.isResize())) {
+                io.MousePos = ImVec2(localPosX, localPosY);
+#ifdef IMGUI_V190_REFACTOR
+                io.AddMousePosEvent(localPosX, localPosY);
+#endif
+                io.MouseDown[button] = true;
+            } else {
+                io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+#ifdef IMGUI_V190_REFACTOR
+                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+            }
+
+            // Any kind of self-dragging/resizing only happens with a floating window in the sim
+            if ((button == 0 || bCanMove) &&  // left button OR right-drag (if move allowed)
+                IsInsideSim() &&            // floating window in sim
+                dragWhat &&                 // and if there actually _is_ dragging
+                (dx != 0 || dy != 0))
+            {
+                // shall we drag the entire window?
+                if (dragWhat.wnd)
+                {
+                    mLeft   += dx;                      // move the window
+                    mRight  += dx;
+                    mTop    += dy;
+                    mBottom += dy;
+                } else {
+                    // do we need to handle window resize?
+                    if (dragWhat.left)   mLeft   += dx;
+                    if (dragWhat.top)    mTop    += dy;
+                    if (dragWhat.right)  mRight  += dx;
+                    if (dragWhat.bottom) mBottom += dy;
+
+                    // Make sure resizing limits are honored
+                    if (mRight-mLeft < minWidth)
+                    {
+                        if (dragWhat.left) mLeft = mRight - minWidth;
+                        else mRight = mLeft + minWidth;
+                    }
+                    if (mRight-mLeft > maxWidth)
+                    {
+                        if (dragWhat.left) mLeft = mRight - maxWidth;
+                        else mRight = mLeft + maxWidth;
+                    }
+                    if (mTop-mBottom < minHeight) {
+                        if (dragWhat.top) mTop = mBottom + minHeight;
+                        else mBottom = mTop - minHeight;
+                    }
+                    if (mTop-mBottom > maxHeight) {
+                        if (dragWhat.top) mTop = mBottom + maxHeight;
+                        else mBottom = mTop - maxHeight;
+                    }
+                    // FIXME: If we had to apply resizing restricitons, then mouse and window frame will now be out of synch
+                }
+
+                // Change window geometry
+                SetWindowGeometry(mLeft, mTop, mRight, mBottom);
+                // now that the window has moved under the mouse we need to update relative mouse pos
+                if (!(button == 0 && dragWhat.isResize())) {
+                    translateToImguiSpace(x, y, io.MousePos.x, io.MousePos.y);
+#ifdef IMGUI_V190_REFACTOR
+                    io.AddMousePosEvent(io.MousePos.x, io.MousePos.y);
+#endif
+                }
+                // Update the last handled position
+                lastMouseDragX = x;
+                lastMouseDragY = y;
+            }
+            break;
+
+        case xplm_MouseDown:
+            bHasMouseFocus = true;
+
+            // Which part of the window would we drag, if any?
+            dragWhat.clear();
+            if ((button == 0 || bCanMove) &&  // left button OR right-drag (if move allowed)
+                IsInsideSim() &&            // floating window in simulator
+                loc_x >= 0 && loc_y >= 0)   // valid local position
+            {
+                // Shall we drag the entire window?
+                // (We allow right-dragging to move the entire window if bCanMove is true, which is set based on the ImGuiWindowFlags_NoMove flag.)
+                if (IsInsideWindowDragArea(loc_x, loc_y) || (button == 1 && bCanMove))
+                {
+                    dragWhat.wnd = true;
+                }
+                // Do we need to handle window resize?
+                else if (bHandleWndResize && button == 0) // left button ONLY for resizing
+                {
+                    dragWhat.left   = loc_x <= WND_RESIZE_LEFT_WIDTH;
+                    dragWhat.top    = loc_y <= WND_RESIZE_TOP_WIDTH;
+                    dragWhat.right  = loc_x >= (mRight - mLeft) - WND_RESIZE_RIGHT_WIDTH;
+                    dragWhat.bottom = loc_y >= (mTop - mBottom) - WND_RESIZE_BOTTOM_WIDTH;
+                }
+                // Anything to drag?
+                if (dragWhat) {
+                    // Remember pos in case of dragging
+                    lastMouseDragX = x;
+                    lastMouseDragY = y;
+                }
+            }
+
+            // Only dispatch mouse-down to ImGui if the outer self-resize border did NOT claim it.
+            // (We intentionally still pass dragWhat.wnd through so right-click context menus and
+            // interactive buttons inside SetWindowDragArea header bars continue working normally.)
+            if (!(button == 0 && dragWhat.isResize())) {
+                io.MousePos = ImVec2(localPosX, localPosY);
+#ifdef IMGUI_V190_REFACTOR
+                io.AddMousePosEvent(localPosX, localPosY);
+                io.AddMouseButtonEvent(button, true);
+#endif
+                io.MouseDown[button] = true;
+            } else {
+                io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+#ifdef IMGUI_V190_REFACTOR
+                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+            }
+            break;
+
+        case xplm_MouseUp:
+        {
+            const bool wasResize = (button == 0 && dragWhat.isResize());
+            if (!wasResize) {
+                io.MousePos = ImVec2(localPosX, localPosY);
+#ifdef IMGUI_V190_REFACTOR
+                io.AddMousePosEvent(localPosX, localPosY);
+                io.AddMouseButtonEvent(button, false);
+#endif
+            } else {
+                io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+#ifdef IMGUI_V190_REFACTOR
+                io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+            }
+            io.MouseDown[button] = false;
+            if (button == 0 || !dragWhat.isResize()) {
+                lastMouseDragX = lastMouseDragY = -1;
+                dragWhat.clear();
+            }
+            break;
+        }
+        default:
+            // dunno!
+            break;
+    }
+
+    return 1;
+}
+
+
+void
+ImgWindow::HandleKeyFuncCB(
+    XPLMWindowID         /*inWindowID*/,
+    char                 inKey,
+    XPLMKeyFlags         inFlags,
+    char                 inVirtualKey,
+    void *               inRefcon,
+    int                  blosingFocus)
+{
+    auto *thisWindow = reinterpret_cast<ImgWindow *>(inRefcon);
+    ImGui::SetCurrentContext(thisWindow->mImGuiContext);
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Loosing focus? That's not exactly something ImGui allows us to do...
+    // we try convincing ImGui to let it go by sending an [Esc] key for the legacy version, or by sending a focus-lost event for the modern version.
+    if (blosingFocus) {
+        thisWindow->bHasMouseFocus = false;
+        thisWindow->bExplicitKeyboardFocus = false;
+        if (thisWindow->bUseImgCursors) {
+            io.MouseDrawCursor = false;
+        }
+#ifdef IMGUI_V190_REFACTOR
+        io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+        io.AddFocusEvent(false); // tell ImGui it lost focus
+#endif /* IMGUI_V190_REFACTOR */
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        if (ImGui::GetCurrentContext()) {
+            // Clear any active ID, to prevent ImGui from thinking it still has focus:
+            ImGui::ClearActiveID();
+        }
+
+        return;  // don't process any further key events if we're losing focus
+    }
+
+    int hasKeyboardFocus = XPLMHasKeyboardFocus(thisWindow->mWindowID);
+    if (io.WantCaptureKeyboard || hasKeyboardFocus || thisWindow->bExplicitKeyboardFocus || (thisWindow->bCaptureKeyboardOnMouseFocus && thisWindow->bHasMouseFocus)) {
+        // Hack for the Backspace key in VR:
+        // Apparently, the virtual VR keyboard sends both the Up and the Down
+        // event within the same drawing cycle, which would overwrite
+        // io.KeyDown[XPLM_VK_BACK] with false again before we could pass on true.
+        // Also see https://forums.x-plane.org/index.php?/forums/topic/147139-dear-imgui-x-plane/&do=findComment&comment=2032062
+        // though I am following a different solution:
+        // So we ignore the "up" event (release key) here, and do the actual
+        // release only after the next drawing cycle (flag bResetBackspace).
+        // (And this little delay doesn't hurt in non-VR either, so we don't even test for VR.)
+
+#ifndef IMGUI_V190_REFACTOR
+        // If Backspace is _released_ ...
+        if (inVirtualKey == XPLM_VK_BACK && !(inFlags & xplm_DownFlag)) {
+            thisWindow->bResetBackspace = true; // have it reset only later in DrawWindowCB
+        }
+        else {
+            // in all normal cases: save the up/down flag as it comes from XP
+            io.KeysDown[int(inVirtualKey)] = (inFlags & xplm_DownFlag) == xplm_DownFlag;
+        }
+        
+        io.KeyShift = (inFlags & xplm_ShiftFlag) == xplm_ShiftFlag;
+        io.KeyAlt = (inFlags & xplm_OptionAltFlag) == xplm_OptionAltFlag;
+        io.KeyCtrl = (inFlags & xplm_ControlFlag) == xplm_ControlFlag;
+
+        // inKey will only includes printable characters,
+        // but also those created with key combinations like @ or {}
+        if ((inFlags & xplm_DownFlag) == xplm_DownFlag &&
+            inKey > '\0')
+        {
+            char smallStr[2] = { inKey, 0 };
+            io.AddInputCharactersUTF8(smallStr);
+        }
+#else /* IMGUI_V190_REFACTOR */
+        bool isDown = (inFlags & xplm_DownFlag) == xplm_DownFlag;
+        ImGuiKey key = vpXPLMKeyToImGuiKey(inVirtualKey);
+
+        // Sync modifiers *first*.
+        // (We send these regardless of whether it's a key down or up, to ensure ImGui's internal modifier bitmask is current.)
+        bool shift = (inFlags & xplm_ShiftFlag) != 0;
+        bool alt = (inFlags & xplm_OptionAltFlag) != 0; // 'Option' on macOS (though no special handling needed).
+        bool ctrl = (inFlags & xplm_ControlFlag) != 0; // 'Super' on macOS (see below).
+
+        // Sync platform-common basic modifiers via the Event System (modern way).
+        io.AddKeyEvent(ImGuiMod_Shift, shift);
+        io.AddKeyEvent(ImGuiMod_Alt,   alt);
+        
+        // Sync legacy structural booleans to avoid known Windows race condition single-frame sync lag with stb_textedit.)
+        io.KeyShift = shift;
+        io.KeyAlt = alt;
+        
+#if defined(__APPLE__) || defined(__MACH__)
+        // On macOS: re-map both 'Ctrl' and 'Cmd' to 'Super'.
+        // (X-Plane's 'Ctrl' and 'Cmd' are indistinguishable, and both need to appear as 'Super' here instead.)
+        io.AddKeyEvent(ImGuiMod_Super, ctrl);
+        io.AddKeyEvent(ImGuiMod_Ctrl,  false); // 'Super' subsumes and thus cancels 'Ctrl' in X-Plane!
+        
+        // Match legacy structural mappings for macOS:
+        io.KeySuper = ctrl;
+        io.KeyCtrl =  false;  // 'Super' subsumes and thus cancels 'Ctrl' in X-Plane!
+
+#else
+        io.AddKeyEvent(ImGuiMod_Ctrl,  ctrl);
+        io.AddKeyEvent(ImGuiMod_Super, false); // 'Super' is not used on non-macOS platforms (so don't let it somehow leak through).
+        
+        // Match legacy structural mappings for Windows/Linux:
+        io.KeyCtrl = ctrl;
+        io.KeySuper = false;
+#endif
+
+        // If backspace is _released_ ...
+        if (inVirtualKey == XPLM_VK_BACK && !isDown) {
+            thisWindow->bResetBackspace = true; // have it reset only later in DrawWindowCB
+        }
+        else if (key != ImGuiKey_None) {
+            io.AddKeyEvent(key, isDown); // send the actual key
+        }
+
+        // Escape outside an active text input releases keyboard focus back to the sim
+        if (inVirtualKey == XPLM_VK_ESCAPE && !io.WantTextInput && isDown) {
+            thisWindow->bHasMouseFocus = false;
+            thisWindow->bExplicitKeyboardFocus = false;
+            XPLMTakeKeyboardFocus(nullptr);
+        }
+
+        // Filter out and only show any true input characters after the key events (i.e., don't send 'v' with "ctrl+v" since we added the shortcut event above instead).
+        bool isAnyModifierActive = ctrl || alt || io.KeySuper || io.KeyCtrl;  // (don't check Shift!)
+        if (isDown && (unsigned char)inKey >= 32 && !isAnyModifierActive)
+        {
+            io.AddInputCharacter((unsigned char)inKey);
+        }
+#endif /* IMGUI_V190_REFACTOR */
+    }
+}
+
+XPLMCursorStatus
+ImgWindow::HandleCursorFuncCB(
+    XPLMWindowID         /*inWindowID*/,
+    int                  x,
+    int                  y,
+    void *               inRefcon)
+{
+    auto *thisWindow = reinterpret_cast<ImgWindow *>(inRefcon);
+
+    // If this is an overlay window that cannot be moved, ignore mouse cursor changes.
+    if (thisWindow->mPreferredLayer == xplm_WindowLayerFlightOverlay && !thisWindow->bCanMove)
+        return xplm_CursorDefault;  // (ignore for immovable overlays)
+
+    ImGui::SetCurrentContext(thisWindow->mImGuiContext);
+    ImGuiIO& io = ImGui::GetIO();
+    float outX, outY;
+    thisWindow->translateToImguiSpace(x, y, outX, outY);
+
+    // If coordinates fall outside the window's client bounds, invalidate mouse and release cursor:
+    if (outX == -FLT_MAX || outY == -FLT_MAX) {
+        if (thisWindow->bUseImgCursors) {
+            io.MouseDrawCursor = false;
+        }
+#ifdef IMGUI_V190_REFACTOR
+        io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        return xplm_CursorDefault;
+    }
+
+    // Don't use ImGui mouse cursor handling if cursor is within special XPLM
+    // self-styled resize handling regions (evaluated BEFORE AddMousePosEvent so
+    // hovering the border never queues inside-window coordinates onto edge scrollbars).
+    if (thisWindow->IsInSelfResizeBorder(x, y))
+    {
+        // Defer to XPLM's resize cursor when inside the XPLM-managed resize grab regions:
+        io.MouseDrawCursor = false;
+#ifdef IMGUI_V190_REFACTOR
+        io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        return xplm_CursorDefault;
+    }
+
+#ifdef IMGUI_V190_REFACTOR
+    io.AddMousePosEvent(outX, outY);
+#endif
+    io.MousePos = ImVec2(outX, outY);
+
+    if (!thisWindow->bUseImgCursors) {
+        // Defer to XPLM's default hardware cursor if dynamic ImGui cursors are not enabled:
+        io.MouseDrawCursor = false;
+        return xplm_CursorDefault;
+    }
+    
+    // Have ImGui take over the mouse cursor for the rest:
+    io.MouseDrawCursor = true;
+    return xplm_CursorHidden;
+}
+
+int
+ImgWindow::HandleMouseWheelFuncCB(
+    XPLMWindowID         /*inWindowID*/,
+    int                  x,
+    int                  y,
+    int                  wheel,
+    int                  clicks,
+    void *               inRefcon)
+{
+    auto *thisWindow = reinterpret_cast<ImgWindow *>(inRefcon);
+
+    // If this is an overlay window that cannot be moved, ignore mouse wheel events.
+    if (thisWindow->mPreferredLayer == xplm_WindowLayerFlightOverlay &&
+        !thisWindow->bCanMove)
+        return 0;  // (ignore mouse-wheel for immovable overlays)
+    
+    ImGui::SetCurrentContext(thisWindow->mImGuiContext);
+    ImGuiIO& io = ImGui::GetIO();
+
+    float outX, outY;
+    thisWindow->translateToImguiSpace(x, y, outX, outY);
+#ifdef IMGUI_V190_REFACTOR
+    io.AddMousePosEvent(outX, outY);
+#endif
+    io.MousePos = ImVec2(outX, outY);
+    switch (wheel) {
+    case 0:
+        io.MouseWheel += static_cast<float>(clicks);
+        break;
+    case 1:
+        io.MouseWheelH += static_cast<float>(clicks);
+        break;
+    default:
+        // unknown wheel
+        break;
+    }
+    return 1;
+}
+
+int
+ImgWindow::HandleRightClickFuncCB(XPLMWindowID /* inWindowID */, int x, int y, XPLMMouseStatus inMouse, void *inRefcon)
+{
+    auto *thisWindow = reinterpret_cast<ImgWindow *>(inRefcon);
+    
+    // If this is an overlay window that cannot be moved, ignore right-clicks altogether.
+    //FIXME: is this the right thing to do?  We could allow right-clicks for context menus, but not allow dragging...
+    if (thisWindow->mPreferredLayer == xplm_WindowLayerFlightOverlay &&
+        !thisWindow->bCanMove)
+        return 0;   // (always ignore right-clicks for overlay layers)
+    
+    return thisWindow->HandleMouseClickGeneric(x, y, inMouse, 1);
+}
+
+
+void
+ImgWindow::SetWindowTitle(const std::string &title)
+{
+    mWindowTitle = title;
+    XPLMSetWindowTitle(mWindowID, mWindowTitle.c_str());
+}
+
+void
+ImgWindow::SetVisible(bool inIsVisible)
+{
+    if (inIsVisible)
+        moveForVR();
+    if (GetVisible() == inIsVisible) {
+        // if the state is already correct, no-op.
+        return;
+    }
+    if (inIsVisible) {
+        if (!onShow()) {
+            // chance to early abort.
+            return;
+        }
+    } else {
+        // Invalidate mouse cursor and position when hiding window
+        ImGuiContext* prevContext = ImGui::GetCurrentContext();
+        ImGui::SetCurrentContext(mImGuiContext);
+        ImGuiIO& io = ImGui::GetIO();
+        if (bUseImgCursors) {
+            io.MouseDrawCursor = false;
+        }
+#ifdef IMGUI_V190_REFACTOR
+        io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+#endif
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+        if (prevContext && prevContext != mImGuiContext) {
+            ImGui::SetCurrentContext(prevContext);
+        }
+    }
+    XPLMSetWindowIsVisible(mWindowID, inIsVisible);
+}
+
+void
+ImgWindow::moveForVR()
+{
+    // if we're trying to display the window, check the state of the VR flag
+    // - if we're VR enabled, explicitly move the window to the VR world.
+    if (XPLMGetDatai(gVrEnabledRef)) {
+        XPLMSetWindowPositioningMode(mWindowID, xplm_WindowVR, 0);
+    } else {
+        if (IsInVR()) {
+            XPLMSetWindowPositioningMode(mWindowID, mPreferredLayer, -1);
+        }
+    }
+}
+
+bool
+ImgWindow::GetVisible() const
+{
+    return XPLMGetWindowIsVisible(mWindowID) != 0;
+}
+
+bool
+ImgWindow::IsUsingPanelGraphics () const
+{
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+    return ImgPanelGraphics::IsAvailable();
+#else
+    return false;
+#endif
+}
+
+bool
+ImgWindow::onShow()
+{
+    return true;
+}
+
+void
+ImgWindow::SetWindowDragArea (int left, int top, int right, int bottom)
+{
+    dragLeft    = left;
+    dragTop     = top;
+    dragRight   = right;
+    dragBottom  = bottom;
+}
+
+void
+ImgWindow::ClearWindowDragArea ()
+{
+    dragLeft = dragTop = dragRight = dragBottom = -1;
+}
+
+bool
+ImgWindow::HasWindowDragArea (int* pL, int* pT,
+                              int* pR, int* pB) const
+{
+    // return definition if requested
+    if (pL) *pL = dragLeft;
+    if (pT) *pT = dragTop;
+    if (pR) *pR = dragRight;
+    if (pB) *pB = dragBottom;
+    
+    // is a valid drag area defined?
+    return
+        dragLeft  >= 0          && dragTop    >= 0 &&
+        dragRight >  dragLeft   && dragBottom >= dragTop;
+}
+
+bool
+ImgWindow::IsInsideWindowDragArea (int x, int y) const
+{
+    // values outside the window aren't valid
+    if (x == -FLT_MAX || y == -FLT_MAX)
+        return false;
+    
+    // is a drag area defined in the first place?
+    if (!HasWindowDragArea())
+        return false;
+    
+    // inside the defined drag area?
+    return
+        dragLeft <= x && x <= dragRight &&
+        dragTop  <= y && y <= dragBottom;
+}
+
+
+
+void
+ImgWindow::SafeDelete()
+{
+    mIsPendingDestruction = true;
+    sPendingDestruction.push(this);
+    if (sSelfDestructHandler == nullptr) {
+        XPLMCreateFlightLoop_t flParams{
+            sizeof(flParams),
+            xplm_FlightLoop_Phase_BeforeFlightModel,
+            &ImgWindow::SelfDestructCallback,
+            nullptr,
+        };
+        sSelfDestructHandler = XPLMCreateFlightLoop(&flParams);
+    }
+    XPLMScheduleFlightLoop(sSelfDestructHandler, -1, 1);
+}
+
+ImTextureID ImgWindow::CreateTexture(const unsigned char* pixels, int width, int height) {
+    if (!pixels || width <= 0 || height <= 0) return (ImTextureID)0;
+    
+#ifdef IMGWINDOW_USE_PANEL_GRAPHICS
+    if (ImgPanelGraphics::IsAvailable()) {
+        void* tex_ref = ImgPanelGraphics::CreateTexture(pixels, width, height);
+        return (ImTextureID)(intptr_t)tex_ref;
+    }
+#endif
+    
+    // Legacy OpenGL Fallback
+    int gl_tex = 0;
+    XPLMGenerateTextureNumbers(&gl_tex, 1);
+    XPLMBindTexture2d(gl_tex, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    
+    return (ImTextureID)(intptr_t)gl_tex;
+}
+
+void ImgWindow::DeleteTexture(ImTextureID textureID) {
+    if (!textureID) return;
+    
+    // Prevent double-queueing the exact same texture (which causes failValidation)
+    for (const auto& item : s_TexturesPendingDestruction) {
+        if (item.first == textureID) return;
+    }
+
+    s_TexturesPendingDestruction.push_back({textureID, XPLMGetCycleNumber()});
+}
+
+struct NamedTextureEntry {
+    ImTextureID textureID = (ImTextureID)0;
+    ImVec2 size = ImVec2(0.0f, 0.0f);
+    ImVec2 uv0 = ImVec2(0.0f, 0.0f);
+    ImVec2 uv1 = ImVec2(1.0f, 1.0f);
+    ImVec4 tint_col = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    ImVec4 border_col = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    bool owned = false;
+};
+
+static std::map<std::string, NamedTextureEntry>& GetNamedTextures() {
+    static std::map<std::string, NamedTextureEntry> s_NamedTextures;
+    return s_NamedTextures;
+}
+
+static ImgWindow::MemoryImageDecodeFn s_MemoryImageDecodeFn = nullptr;
+static ImgWindow::MemoryImageFreeFn   s_MemoryImageFreeFn   = nullptr;
+
+static std::vector<ImgWindow::ShutdownHandlerFn>& GetShutdownHandlers() {
+    static std::vector<ImgWindow::ShutdownHandlerFn> s_ShutdownHandlers;
+    return s_ShutdownHandlers;
+}
+
+void ImgWindow::SetMemoryImageDecoder(MemoryImageDecodeFn decodeFn, MemoryImageFreeFn freeFn)
+{
+    s_MemoryImageDecodeFn = decodeFn;
+    s_MemoryImageFreeFn   = freeFn;
+}
+
+void ImgWindow::AddShutdownHandler(ShutdownHandlerFn fn)
+{
+    auto& handlers = GetShutdownHandlers();
+    if (fn && std::find(handlers.begin(), handlers.end(), fn) == handlers.end()) {
+        handlers.push_back(fn);
+    }
+}
+
+void ImgWindow::Shutdown() {
+    // 0. Invoke registered subsystem shutdown handlers
+    for (auto fn : GetShutdownHandlers()) {
+        if (fn) fn();
+    }
+
+    // 1. Clean up registered named textures (owned textures only)
+    auto& namedTextures = GetNamedTextures();
+    for (auto& pair : namedTextures) {
+        if (pair.second.owned && pair.second.textureID) {
+            ImgWindow::DeleteTexture(pair.second.textureID);
+        }
+    }
+    namedTextures.clear();
+
+    for (const auto& item : s_TexturesPendingDestruction) {
+#ifdef IMGWINDOW_USE_PANEL_GRAPHICS
+        if (ImgPanelGraphics::IsAvailable()) {
+            ImgPanelGraphics::DestroyTexture((void*)(intptr_t)item.first);
+        } else
+#endif
+        {
+            GLuint glTextureId = (GLuint)(intptr_t)item.first;
+            glDeleteTextures(1, &glTextureId);
+        }
+    }
+    s_TexturesPendingDestruction.clear();
+}
+
+ImTextureID ImgWindow::RegisterNamedTexture(const std::string& name, const unsigned char* rgba_pixels, int width, int height)
+{
+    if (name.empty() || !rgba_pixels || width <= 0 || height <= 0) return (ImTextureID)0;
+
+    UnregisterNamedTexture(name);
+
+    ImTextureID texID = ImgWindow::CreateTexture(rgba_pixels, width, height);
+    if (!texID) return (ImTextureID)0;
+
+    NamedTextureEntry entry;
+    entry.textureID = texID;
+    entry.size = ImVec2(static_cast<float>(width), static_cast<float>(height));
+    entry.owned = true;
+    GetNamedTextures()[name] = entry;
+
+    return texID;
+}
+
+ImTextureID ImgWindow::RegisterNamedTexture(const std::string& name, ImTextureID textureID, ImVec2 size,
+                                            ImVec2 uv0, ImVec2 uv1, ImVec4 tint_col, ImVec4 border_col)
+{
+    if (name.empty() || !textureID) return (ImTextureID)0;
+
+    UnregisterNamedTexture(name);
+
+    NamedTextureEntry entry;
+    entry.textureID = textureID;
+    entry.size = size;
+    entry.uv0 = uv0;
+    entry.uv1 = uv1;
+    entry.tint_col = tint_col;
+    entry.border_col = border_col;
+    entry.owned = false;
+    GetNamedTextures()[name] = entry;
+
+    return textureID;
+}
+
+void ImgWindow::UnregisterNamedTexture(const std::string& name)
+{
+    auto& map = GetNamedTextures();
+    auto it = map.find(name);
+    if (it != map.end()) {
+        if (it->second.owned && it->second.textureID) {
+            ImgWindow::DeleteTexture(it->second.textureID);
+        }
+        map.erase(it);
+    }
+}
+
+ImTextureID ImgWindow::RegisterMemoryImage(const std::string& name, const void* data, size_t lengthBytes, int* outWidth, int* outHeight)
+{
+    if (outWidth) *outWidth = 0;
+    if (outHeight) *outHeight = 0;
+    if (name.empty() || !data || lengthBytes == 0) return (ImTextureID)0;
+
+    if (!s_MemoryImageDecodeFn) {
+        return (ImTextureID)0;
+    }
+
+    int w = 0, h = 0;
+    unsigned char* pixels = s_MemoryImageDecodeFn(data, lengthBytes, &w, &h);
+    if (!pixels || w <= 0 || h <= 0) return (ImTextureID)0;
+
+    ImTextureID texID = RegisterNamedTexture(name, pixels, w, h);
+    if (s_MemoryImageFreeFn) {
+        s_MemoryImageFreeFn(pixels);
+    }
+
+    if (outWidth) *outWidth = w;
+    if (outHeight) *outHeight = h;
+    return texID;
+}
+
+ImTextureID ImgWindow::GetNamedTexture(const std::string& name, ImVec2* outSize)
+{
+    return GetNamedTexture(name, outSize, nullptr, nullptr, nullptr, nullptr);
+}
+
+ImTextureID ImgWindow::GetNamedTexture(const std::string& name, ImVec2* outSize, ImVec2* outUv0, ImVec2* outUv1,
+                                       ImVec4* outTintCol, ImVec4* outBorderCol)
+{
+    if (outSize) *outSize = ImVec2(0.0f, 0.0f);
+    if (outUv0) *outUv0 = ImVec2(0.0f, 0.0f);
+    if (outUv1) *outUv1 = ImVec2(1.0f, 1.0f);
+    if (outTintCol) *outTintCol = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+    if (outBorderCol) *outBorderCol = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
+    if (name.empty()) return (ImTextureID)0;
+
+    auto& map = GetNamedTextures();
+    auto it = map.find(name);
+    if (it != map.end()) {
+        if (outSize) *outSize = it->second.size;
+        if (outUv0) *outUv0 = it->second.uv0;
+        if (outUv1) *outUv1 = it->second.uv1;
+        if (outTintCol) *outTintCol = it->second.tint_col;
+        if (outBorderCol) *outBorderCol = it->second.border_col;
+        return it->second.textureID;
+    }
+
+    return (ImTextureID)0;
+}
+
+void ImGui::ImageNamed(const char* name, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+{
+    if (!name || !*name) return;
+    ImVec2 nativeSize;
+    ImVec2 storedUv0(0.0f, 0.0f), storedUv1(1.0f, 1.0f);
+    ImTextureID tex = ImgWindow::GetNamedTexture(name, &nativeSize, &storedUv0, &storedUv1, nullptr, nullptr);
+    if (!tex && Detail::GetNamedTextureResolver()) {
+        tex = Detail::GetNamedTextureResolver()(name, &nativeSize);
+    }
+    if (!tex) return;
+
+    ImVec2 renderSize = size;
+    if (renderSize.x <= 0.0f && renderSize.y <= 0.0f) {
+        renderSize = nativeSize;
+    } else if (renderSize.x <= 0.0f && nativeSize.y > 0.0f) {
+        renderSize.x = std::round(renderSize.y * (nativeSize.x / nativeSize.y));
+    } else if (renderSize.y <= 0.0f && nativeSize.x > 0.0f) {
+        renderSize.y = std::round(renderSize.x * (nativeSize.y / nativeSize.x));
+    }
+
+    ImVec2 effUv0 = (uv0.x == 0.0f && uv0.y == 0.0f && uv1.x == 1.0f && uv1.y == 1.0f) ? storedUv0 : uv0;
+    ImVec2 effUv1 = (uv0.x == 0.0f && uv0.y == 0.0f && uv1.x == 1.0f && uv1.y == 1.0f) ? storedUv1 : uv1;
+
+#if defined(IMGUI_VERSION_NUM) && (IMGUI_VERSION_NUM >= 19190)
+    if (border_col.w > 0.0f) {
+        const float border_size = ImGui::GetStyle().ImageBorderSize;
+        ImGui::PushStyleVar(ImGuiStyleVar_ImageBorderSize, border_size > 1.0f ? border_size : 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Border, border_col);
+        ImGui::ImageWithBg(tex, renderSize, effUv0, effUv1, ImVec4(0, 0, 0, 0), tint_col);
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar();
+    } else {
+        ImGui::PushStyleVar(ImGuiStyleVar_ImageBorderSize, 0.0f);
+        ImGui::ImageWithBg(tex, renderSize, effUv0, effUv1, ImVec4(0, 0, 0, 0), tint_col);
+        ImGui::PopStyleVar();
+    }
+#else
+    ImGui::Image(tex, renderSize, effUv0, effUv1, tint_col, border_col);
+#endif
+}
+
+
+bool
+ImgWindow::ClearActiveInputTextIfClickedOutside()
+{
+    ImGuiContext* ctx = ImGui::GetCurrentContext();
+    if (!ctx)
+        return false;
+    ImGuiContext& g = *ctx;
+    ImGuiIO& io = ImGui::GetIO();
+
+    if (g.ActiveId != 0 && g.InputTextState.ID != 0 && g.ActiveId == g.InputTextState.ID)
+    {
+        if (io.MouseClicked[0] || io.MouseClicked[1])
+        {
+            ImGuiWindow* activeWindow = g.ActiveIdWindow ? g.ActiveIdWindow : g.NavWindow;
+            if (activeWindow != nullptr)
+            {
+                int layer = (g.NavLayer >= 0 && g.NavLayer < ImGuiNavLayer_COUNT) ? g.NavLayer : 0;
+                const ImRect& relRect = activeWindow->NavRectRel[layer];
+                if (!relRect.IsInverted())
+                {
+#if defined(IMGUI_VERSION_NUM) && IMGUI_VERSION_NUM >= 18900
+                    ImRect absRect = ImGui::WindowRectRelToAbs(activeWindow, relRect);
+#else
+                    ImRect absRect(relRect.Min.x + activeWindow->Pos.x, relRect.Min.y + activeWindow->Pos.y, relRect.Max.x + activeWindow->Pos.x, relRect.Max.y + activeWindow->Pos.y);
+#endif
+                    absRect.ClipWith(activeWindow->ClipRect);
+                    if (!absRect.Contains(io.MousePos))
+                    {
+                        ImGui::ClearActiveID();
+#ifdef IMGUI_V190_REFACTOR
+                        ImGui::SetKeyOwner(ImGuiKey_MouseLeft, ImGuiKeyOwner_NoOwner);
+#endif
+                        return true;
+                    }
+                }
+                else
+                {
+                    ImGui::ClearActiveID();
+#ifdef IMGUI_V190_REFACTOR
+                    ImGui::SetKeyOwner(ImGuiKey_MouseLeft, ImGuiKeyOwner_NoOwner);
+#endif
+                    return true;
+                }
+            }
+            else
+            {
+                ImGui::ClearActiveID();
+#ifdef IMGUI_V190_REFACTOR
+                ImGui::SetKeyOwner(ImGuiKey_MouseLeft, ImGuiKeyOwner_NoOwner);
+#endif
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::queue<ImgWindow *>  ImgWindow::sPendingDestruction;
+XPLMFlightLoopID         ImgWindow::sSelfDestructHandler = nullptr;
+
+float
+ImgWindow::SelfDestructCallback(float /*inElapsedSinceLastCall*/,
+                                float /*inElapsedTimeSinceLastFlightLoop*/,
+                                int   /*inCounter*/,
+                                void* /*inRefcon*/)
+{
+    while (!sPendingDestruction.empty()) {
+        auto *thisObj = sPendingDestruction.front();
+        sPendingDestruction.pop();
+        delete thisObj;
+    }
+    return 0;
+}
+
+#if defined(IMGWINDOW_USE_PANEL_GRAPHICS)
+/** Support dynamic binding to the panel graphics library.
+ *  This allows us to use the panel graphics library if requested when it
+ *  is available, or to fall back to the standard OpenGL rendering if
+ *  not -- but only if the plugin has defined IMGWINDOW_USE_PANEL_GRAPHICS
+ *  in its build configuration.
+ */
+namespace ImgPanelGraphics {
+
+    // Function pointers
+    static void* (*s_CreateTexture)(const unsigned char*, int, int) = nullptr;
+    static void (*s_DestroyTexture)(void*) = nullptr;
+    static void (*s_DrawCalls)(const XPLMMesh_t*, int, const XPLMDrawCall_t*) = nullptr;
+    
+    static void (*s_TransformPush)() = nullptr;
+    static void (*s_TransformPop)() = nullptr;
+    static void (*s_TransformTranslate)(float, float) = nullptr;
+    static void (*s_TransformScale)(float, float) = nullptr;
+
+    static bool s_initialized = false;
+    static bool s_available = false;
+    static const char* s_fallbackReason = nullptr;
+
+    static void InitDynamic() {
+        if (s_initialized) return;
+        s_initialized = true;
+
+        s_CreateTexture = (void* (*)(const unsigned char*, int, int)) XPLMFindSymbol("XPLMCreateTexture");
+        s_DestroyTexture = (void (*)(void*)) XPLMFindSymbol("XPLMDestroyTexture");
+        s_DrawCalls = (void (*)(const XPLMMesh_t*, int, const XPLMDrawCall_t*)) XPLMFindSymbol("XPLMDrawCalls");
+        
+        s_TransformPush = (void (*)()) XPLMFindSymbol("XPLMTransformPush");
+        s_TransformPop = (void (*)()) XPLMFindSymbol("XPLMTransformPop");
+        s_TransformTranslate = (void (*)(float, float)) XPLMFindSymbol("XPLMTransformTranslate");
+        s_TransformScale = (void (*)(float, float)) XPLMFindSymbol("XPLMTransformScale");
+
+        if (s_CreateTexture && s_DestroyTexture && s_DrawCalls && s_TransformPush && s_TransformPop && s_TransformTranslate && s_TransformScale) {
+            // Verify that we're running within the latest v4.4 (b3+) SDK, or else fall back to legacy OpenGL.
+            // (Breaking Panel Graphics API changes happened after v12.4.4b2,
+            // which has a numeric internal version of 124412. So the final
+            // version of the SDK will be with internal X-Plane version
+            // is > 124412.)
+            XPLMDataRef versionRef = XPLMFindDataRef("sim/version/xplane_internal_version");
+            int xpVersion = versionRef ? XPLMGetDatai(versionRef) : 0;
+            bool hasSafePanelGraphicsVersion = (xpVersion > 124412);
+
+            // Only enable Panel Graphics if we have a safe version, else fall back to legacy OpenGL.
+            if (hasSafePanelGraphicsVersion) {
+                // Fully safe to use Panel Graphics!
+                s_available = true;
+                s_fallbackReason = nullptr;
+            } else {
+                s_available = false;
+                s_fallbackReason = "requires X-Plane 12.4.4b3+ for Panel Graphics";
+            }
+        } else {
+            s_available = false;
+            s_fallbackReason = "would need XPLM v4.4 for Panel Graphics rendering";
+        }
+    }
+
+    bool IsAvailable() {
+        InitDynamic();
+        return s_available;
+    }
+
+    const char* GetFallbackReason() {
+        InitDynamic();
+        return s_fallbackReason;
+    }
+
+    void* CreateTexture(const unsigned char* rgba_image, int width, int height) {
+        if (s_CreateTexture) return s_CreateTexture(rgba_image, width, height);
+        return nullptr;
+    }
+
+    void DestroyTexture(void* tex_ref) {
+        if (s_DestroyTexture) s_DestroyTexture(tex_ref);
+    }
+
+    void DrawCalls(const XPLMMesh_t* inMesh, int inCount, const XPLMDrawCall_t inDrawCalls[]) {
+        if (s_DrawCalls) s_DrawCalls(inMesh, inCount, inDrawCalls);
+    }
+    
+    void TransformPush() {
+        if (s_TransformPush) s_TransformPush();
+    }
+    
+    void TransformPop() {
+        if (s_TransformPop) s_TransformPop();
+    }
+    
+    void TransformTranslate(float x, float y) {
+        if (s_TransformTranslate) s_TransformTranslate(x, y);
+    }
+    
+    void TransformScale(float x, float y) {
+        if (s_TransformScale) s_TransformScale(x, y);
+    }
+}
+
+#endif /* IMGWINDOW_USE_PANEL_GRAPHICS */

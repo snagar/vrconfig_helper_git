@@ -1,0 +1,186 @@
+// hpvr - named colours
+//
+// Colours are referenced by name, never by number, anywhere else in the code.
+// Standard names: the common web colour names (RGB normalised to 0..1).
+// Project colours: color_vec4_hpvr_* (the plugin's own palette).
+// Roles (which colour is used for what) are in Theme.h.
+
+#pragma once
+
+#include "imgui.h"
+
+namespace hpvr::color {
+
+// --- standard names ---------------------------------------------------------------
+inline const ImVec4 color_vec4_aliceblue                      = {0.941f, 0.973f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_antiquewhite                   = {0.980f, 0.922f, 0.843f, 1.0f};
+inline const ImVec4 color_vec4_aqua                           = {0.000f, 1.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_aquamarine                     = {0.498f, 1.000f, 0.831f, 1.0f};
+inline const ImVec4 color_vec4_azure                          = {0.941f, 1.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_beige                          = {0.961f, 0.961f, 0.863f, 1.0f};
+inline const ImVec4 color_vec4_bisque                         = {1.000f, 0.894f, 0.769f, 1.0f};
+inline const ImVec4 color_vec4_black                          = {0.000f, 0.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_blanchedalmond                 = {1.000f, 0.922f, 0.804f, 1.0f};
+inline const ImVec4 color_vec4_blue                           = {0.000f, 0.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_blueviolet                     = {0.541f, 0.169f, 0.886f, 1.0f};
+inline const ImVec4 color_vec4_brown                          = {0.647f, 0.165f, 0.165f, 1.0f};
+inline const ImVec4 color_vec4_burlywood                      = {0.871f, 0.722f, 0.529f, 1.0f};
+inline const ImVec4 color_vec4_cadetblue                      = {0.373f, 0.620f, 0.627f, 1.0f};
+inline const ImVec4 color_vec4_chartreuse                     = {0.498f, 1.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_chocolate                      = {0.824f, 0.412f, 0.118f, 1.0f};
+inline const ImVec4 color_vec4_coral                          = {1.000f, 0.498f, 0.314f, 1.0f};
+inline const ImVec4 color_vec4_cornflowerblue                 = {0.392f, 0.584f, 0.929f, 1.0f};
+inline const ImVec4 color_vec4_cornsilk                       = {1.000f, 0.973f, 0.863f, 1.0f};
+inline const ImVec4 color_vec4_crimson                        = {0.863f, 0.078f, 0.235f, 1.0f};
+inline const ImVec4 color_vec4_cyan                           = {0.000f, 1.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_darkblue                       = {0.000f, 0.000f, 0.545f, 1.0f};
+inline const ImVec4 color_vec4_darkcyan                       = {0.000f, 0.545f, 0.545f, 1.0f};
+inline const ImVec4 color_vec4_darkgoldenrod                  = {0.722f, 0.525f, 0.043f, 1.0f};
+inline const ImVec4 color_vec4_darkgray                       = {0.663f, 0.663f, 0.663f, 1.0f};
+inline const ImVec4 color_vec4_darkgreen                      = {0.000f, 0.392f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_darkgrey                       = {0.663f, 0.663f, 0.663f, 1.0f};
+inline const ImVec4 color_vec4_darkkhaki                      = {0.741f, 0.718f, 0.420f, 1.0f};
+inline const ImVec4 color_vec4_darkmagenta                    = {0.545f, 0.000f, 0.545f, 1.0f};
+inline const ImVec4 color_vec4_darkolivegreen                 = {0.333f, 0.420f, 0.184f, 1.0f};
+inline const ImVec4 color_vec4_darkorange                     = {1.000f, 0.549f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_darkorchid                     = {0.600f, 0.196f, 0.800f, 1.0f};
+inline const ImVec4 color_vec4_darkred                        = {0.545f, 0.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_darksalmon                     = {0.914f, 0.588f, 0.478f, 1.0f};
+inline const ImVec4 color_vec4_darkseagreen                   = {0.561f, 0.737f, 0.561f, 1.0f};
+inline const ImVec4 color_vec4_darkslateblue                  = {0.282f, 0.239f, 0.545f, 1.0f};
+inline const ImVec4 color_vec4_darkslategray                  = {0.184f, 0.310f, 0.310f, 1.0f};
+inline const ImVec4 color_vec4_darkslategrey                  = {0.184f, 0.310f, 0.310f, 1.0f};
+inline const ImVec4 color_vec4_darkturquoise                  = {0.000f, 0.808f, 0.820f, 1.0f};
+inline const ImVec4 color_vec4_darkviolet                     = {0.580f, 0.000f, 0.827f, 1.0f};
+inline const ImVec4 color_vec4_deeppink                       = {1.000f, 0.078f, 0.576f, 1.0f};
+inline const ImVec4 color_vec4_deepskyblue                    = {0.000f, 0.749f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_dimgray                        = {0.412f, 0.412f, 0.412f, 1.0f};
+inline const ImVec4 color_vec4_dimgrey                        = {0.412f, 0.412f, 0.412f, 1.0f};
+inline const ImVec4 color_vec4_dodgerblue                     = {0.118f, 0.565f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_firebrick                      = {0.698f, 0.133f, 0.133f, 1.0f};
+inline const ImVec4 color_vec4_floralwhite                    = {1.000f, 0.980f, 0.941f, 1.0f};
+inline const ImVec4 color_vec4_forestgreen                    = {0.133f, 0.545f, 0.133f, 1.0f};
+inline const ImVec4 color_vec4_fuchsia                        = {1.000f, 0.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_gainsboro                      = {0.863f, 0.863f, 0.863f, 1.0f};
+inline const ImVec4 color_vec4_ghostwhite                     = {0.973f, 0.973f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_gold                           = {1.000f, 0.843f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_goldenrod                      = {0.855f, 0.647f, 0.125f, 1.0f};
+inline const ImVec4 color_vec4_gray                           = {0.502f, 0.502f, 0.502f, 1.0f};
+inline const ImVec4 color_vec4_green                          = {0.000f, 0.502f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_greenyellow                    = {0.678f, 1.000f, 0.184f, 1.0f};
+inline const ImVec4 color_vec4_grey                           = {0.502f, 0.502f, 0.502f, 1.0f};
+inline const ImVec4 color_vec4_honeydew                       = {0.941f, 1.000f, 0.941f, 1.0f};
+inline const ImVec4 color_vec4_hotpink                        = {1.000f, 0.412f, 0.706f, 1.0f};
+inline const ImVec4 color_vec4_indianred                      = {0.804f, 0.361f, 0.361f, 1.0f};
+inline const ImVec4 color_vec4_indigo                         = {0.294f, 0.000f, 0.510f, 1.0f};
+inline const ImVec4 color_vec4_ivory                          = {1.000f, 1.000f, 0.941f, 1.0f};
+inline const ImVec4 color_vec4_khaki                          = {0.941f, 0.902f, 0.549f, 1.0f};
+inline const ImVec4 color_vec4_lavender                       = {0.902f, 0.902f, 0.980f, 1.0f};
+inline const ImVec4 color_vec4_lavenderblush                  = {1.000f, 0.941f, 0.961f, 1.0f};
+inline const ImVec4 color_vec4_lawngreen                      = {0.486f, 0.988f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_lemonchiffon                   = {1.000f, 0.980f, 0.804f, 1.0f};
+inline const ImVec4 color_vec4_lightblue                      = {0.678f, 0.847f, 0.902f, 1.0f};
+inline const ImVec4 color_vec4_lightcoral                     = {0.941f, 0.502f, 0.502f, 1.0f};
+inline const ImVec4 color_vec4_lightcyan                      = {0.878f, 1.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_lightgoldenrodyellow           = {0.980f, 0.980f, 0.824f, 1.0f};
+inline const ImVec4 color_vec4_lightgray                      = {0.827f, 0.827f, 0.827f, 1.0f};
+inline const ImVec4 color_vec4_lightgreen                     = {0.565f, 0.933f, 0.565f, 1.0f};
+inline const ImVec4 color_vec4_lightgrey                      = {0.827f, 0.827f, 0.827f, 1.0f};
+inline const ImVec4 color_vec4_lightpink                      = {1.000f, 0.714f, 0.757f, 1.0f};
+inline const ImVec4 color_vec4_lightsalmon                    = {1.000f, 0.627f, 0.478f, 1.0f};
+inline const ImVec4 color_vec4_lightseagreen                  = {0.125f, 0.698f, 0.667f, 1.0f};
+inline const ImVec4 color_vec4_lightskyblue                   = {0.529f, 0.808f, 0.980f, 1.0f};
+inline const ImVec4 color_vec4_lightslategray                 = {0.467f, 0.533f, 0.600f, 1.0f};
+inline const ImVec4 color_vec4_lightslategrey                 = {0.467f, 0.533f, 0.600f, 1.0f};
+inline const ImVec4 color_vec4_lightsteelblue                 = {0.690f, 0.769f, 0.871f, 1.0f};
+inline const ImVec4 color_vec4_lightyellow                    = {1.000f, 1.000f, 0.878f, 1.0f};
+inline const ImVec4 color_vec4_lime                           = {0.000f, 1.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_limegreen                      = {0.196f, 0.804f, 0.196f, 1.0f};
+inline const ImVec4 color_vec4_linen                          = {0.980f, 0.941f, 0.902f, 1.0f};
+inline const ImVec4 color_vec4_magenta                        = {1.000f, 0.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_maroon                         = {0.502f, 0.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_mediumaquamarine               = {0.400f, 0.804f, 0.667f, 1.0f};
+inline const ImVec4 color_vec4_mediumblue                     = {0.000f, 0.000f, 0.804f, 1.0f};
+inline const ImVec4 color_vec4_mediumorchid                   = {0.729f, 0.333f, 0.827f, 1.0f};
+inline const ImVec4 color_vec4_mediumpurple                   = {0.576f, 0.439f, 0.859f, 1.0f};
+inline const ImVec4 color_vec4_mediumseagreen                 = {0.235f, 0.702f, 0.443f, 1.0f};
+inline const ImVec4 color_vec4_mediumslateblue                = {0.482f, 0.408f, 0.933f, 1.0f};
+inline const ImVec4 color_vec4_mediumspringgreen              = {0.000f, 0.980f, 0.604f, 1.0f};
+inline const ImVec4 color_vec4_mediumturquoise                = {0.282f, 0.820f, 0.800f, 1.0f};
+inline const ImVec4 color_vec4_mediumvioletred                = {0.780f, 0.082f, 0.522f, 1.0f};
+inline const ImVec4 color_vec4_midnightblue                   = {0.098f, 0.098f, 0.439f, 1.0f};
+inline const ImVec4 color_vec4_mintcream                      = {0.961f, 1.000f, 0.980f, 1.0f};
+inline const ImVec4 color_vec4_mistyrose                      = {1.000f, 0.894f, 0.882f, 1.0f};
+inline const ImVec4 color_vec4_moccasin                       = {1.000f, 0.894f, 0.710f, 1.0f};
+inline const ImVec4 color_vec4_navajowhite                    = {1.000f, 0.871f, 0.678f, 1.0f};
+inline const ImVec4 color_vec4_navy                           = {0.000f, 0.000f, 0.502f, 1.0f};
+inline const ImVec4 color_vec4_oldlace                        = {0.992f, 0.961f, 0.902f, 1.0f};
+inline const ImVec4 color_vec4_olive                          = {0.502f, 0.502f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_olivedrab                      = {0.420f, 0.557f, 0.137f, 1.0f};
+inline const ImVec4 color_vec4_orange                         = {1.000f, 0.647f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_orangered                      = {1.000f, 0.271f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_orchid                         = {0.855f, 0.439f, 0.839f, 1.0f};
+inline const ImVec4 color_vec4_palegoldenrod                  = {0.933f, 0.910f, 0.667f, 1.0f};
+inline const ImVec4 color_vec4_palegreen                      = {0.596f, 0.984f, 0.596f, 1.0f};
+inline const ImVec4 color_vec4_paleturquoise                  = {0.686f, 0.933f, 0.933f, 1.0f};
+inline const ImVec4 color_vec4_palevioletred                  = {0.859f, 0.439f, 0.576f, 1.0f};
+inline const ImVec4 color_vec4_papayawhip                     = {1.000f, 0.937f, 0.835f, 1.0f};
+inline const ImVec4 color_vec4_peachpuff                      = {1.000f, 0.855f, 0.725f, 1.0f};
+inline const ImVec4 color_vec4_peru                           = {0.804f, 0.522f, 0.247f, 1.0f};
+inline const ImVec4 color_vec4_pink                           = {1.000f, 0.753f, 0.796f, 1.0f};
+inline const ImVec4 color_vec4_plum                           = {0.867f, 0.627f, 0.867f, 1.0f};
+inline const ImVec4 color_vec4_powderblue                     = {0.690f, 0.878f, 0.902f, 1.0f};
+inline const ImVec4 color_vec4_purple                         = {0.502f, 0.000f, 0.502f, 1.0f};
+inline const ImVec4 color_vec4_red                            = {1.000f, 0.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_rosybrown                      = {0.737f, 0.561f, 0.561f, 1.0f};
+inline const ImVec4 color_vec4_royalblue                      = {0.255f, 0.412f, 0.882f, 1.0f};
+inline const ImVec4 color_vec4_saddlebrown                    = {0.545f, 0.271f, 0.075f, 1.0f};
+inline const ImVec4 color_vec4_salmon                         = {0.980f, 0.502f, 0.447f, 1.0f};
+inline const ImVec4 color_vec4_sandybrown                     = {0.957f, 0.643f, 0.376f, 1.0f};
+inline const ImVec4 color_vec4_seagreen                       = {0.180f, 0.545f, 0.341f, 1.0f};
+inline const ImVec4 color_vec4_seashell                       = {1.000f, 0.961f, 0.933f, 1.0f};
+inline const ImVec4 color_vec4_sienna                         = {0.627f, 0.322f, 0.176f, 1.0f};
+inline const ImVec4 color_vec4_silver                         = {0.753f, 0.753f, 0.753f, 1.0f};
+inline const ImVec4 color_vec4_skyblue                        = {0.529f, 0.808f, 0.922f, 1.0f};
+inline const ImVec4 color_vec4_slateblue                      = {0.416f, 0.353f, 0.804f, 1.0f};
+inline const ImVec4 color_vec4_slategray                      = {0.439f, 0.502f, 0.565f, 1.0f};
+inline const ImVec4 color_vec4_slategrey                      = {0.439f, 0.502f, 0.565f, 1.0f};
+inline const ImVec4 color_vec4_snow                           = {1.000f, 0.980f, 0.980f, 1.0f};
+inline const ImVec4 color_vec4_springgreen                    = {0.000f, 1.000f, 0.498f, 1.0f};
+inline const ImVec4 color_vec4_steelblue                      = {0.275f, 0.510f, 0.706f, 1.0f};
+inline const ImVec4 color_vec4_tan                            = {0.824f, 0.706f, 0.549f, 1.0f};
+inline const ImVec4 color_vec4_teal                           = {0.000f, 0.502f, 0.502f, 1.0f};
+inline const ImVec4 color_vec4_thistle                        = {0.847f, 0.749f, 0.847f, 1.0f};
+inline const ImVec4 color_vec4_tomato                         = {1.000f, 0.388f, 0.278f, 1.0f};
+inline const ImVec4 color_vec4_turquoise                      = {0.251f, 0.878f, 0.816f, 1.0f};
+inline const ImVec4 color_vec4_violet                         = {0.933f, 0.510f, 0.933f, 1.0f};
+inline const ImVec4 color_vec4_wheat                          = {0.961f, 0.871f, 0.702f, 1.0f};
+inline const ImVec4 color_vec4_white                          = {1.000f, 1.000f, 1.000f, 1.0f};
+inline const ImVec4 color_vec4_whitesmoke                     = {0.961f, 0.961f, 0.961f, 1.0f};
+inline const ImVec4 color_vec4_yellow                         = {1.000f, 1.000f, 0.000f, 1.0f};
+inline const ImVec4 color_vec4_yellowgreen                    = {0.604f, 0.804f, 0.196f, 1.0f};
+
+// --- project colours -------------------------------------------------------------
+inline const ImVec4 color_vec4_hpvr_panel                     = { 0.725f, 0.737f, 0.800f, 1.0f };   // window background (grey-blue)
+inline const ImVec4 color_vec4_hpvr_panel_dark                = { 0.650f, 0.663f, 0.733f, 1.0f };   // table header, separators, neutral status
+inline const ImVec4 color_vec4_hpvr_popup                     = { 0.850f, 0.860f, 0.910f, 1.0f };   // popup background, lighter than the panel
+inline const ImVec4 color_vec4_hpvr_input                     = { 0.960f, 0.960f, 0.980f, 1.0f };   // input fields
+inline const ImVec4 color_vec4_hpvr_text_dim                  = { 0.330f, 0.340f, 0.400f, 1.0f };   // secondary / disabled text
+inline const ImVec4 color_vec4_hpvr_text_help                 = { 0.050f, 0.050f, 0.100f, 1.0f };   // help marker text
+inline const ImVec4 color_vec4_hpvr_button                    = { 0.247f, 0.498f, 0.851f, 1.0f };   // standard button
+inline const ImVec4 color_vec4_hpvr_button_hover              = { 0.337f, 0.596f, 0.937f, 1.0f };
+inline const ImVec4 color_vec4_hpvr_button_active             = { 0.180f, 0.400f, 0.741f, 1.0f };
+inline const ImVec4 color_vec4_hpvr_button_off                = { 0.560f, 0.580f, 0.650f, 1.0f };   // disabled button
+inline const ImVec4 color_vec4_hpvr_unsaved                   = { 0.851f, 0.451f, 0.051f, 1.0f };   // unsaved change: backgrounds
+inline const ImVec4 color_vec4_hpvr_unsaved_hover             = { 0.922f, 0.533f, 0.137f, 1.0f };
+inline const ImVec4 color_vec4_hpvr_unsaved_active            = { 0.722f, 0.380f, 0.039f, 1.0f };
+inline const ImVec4 color_vec4_hpvr_unsaved_text              = { 0.702f, 0.361f, 0.000f, 1.0f };   // unsaved change: text
+inline const ImVec4 color_vec4_hpvr_saved                     = { 0.180f, 0.620f, 0.267f, 1.0f };   // saved this run: backgrounds
+inline const ImVec4 color_vec4_hpvr_saved_text                = { 0.118f, 0.478f, 0.200f, 1.0f };   // saved this run: text
+inline const ImVec4 color_vec4_hpvr_error                     = { 0.780f, 0.180f, 0.180f, 1.0f };   // error: backgrounds
+inline const ImVec4 color_vec4_hpvr_error_text                = { 0.650f, 0.080f, 0.080f, 1.0f };   // error: text
+inline const ImVec4 color_vec4_hpvr_advanced                  = { 0.502f, 0.361f, 0.745f, 1.0f };   // Adv button (purple)
+inline const ImVec4 color_vec4_hpvr_same_folder_text          = { 0.090f, 0.310f, 0.700f, 1.0f };   // aircraft in the loaded aircraft's folder (blue)
+inline const ImVec4 color_vec4_hpvr_other_folder_text         = { 0.720f, 0.100f, 0.100f, 1.0f };   // aircraft in another folder (red)
+
+} // namespace hpvr::color

@@ -1,0 +1,318 @@
+# `ImgWindow v2` Framework: Basic Usage Guide
+
+Welcome to the `ImgWindow` framework! This guide covers the basic usage model for integrating [Dear ImGui](https://github.com/ocornut/imgui) into your C++ X-Plane plugins using XPLM's modern window API.
+
+To future-proof UI development, Laminar Research introduced the **Panel Graphics** API in X-Plane 12.4.4. This is a modern, general-purpose graphics framework allowing developers to draw 2D interfaces directly through X-Plane's native Vulkan or Metal rendering pipelines, eventually replacing the legacy OpenGL architecture.
+
+While this framework supports a powerful "dynamic bridge" to seamlessly multiplex your UI rendering between legacy OpenGL (on older sims) and the new Panel Graphics pipeline (on XP12.4.4+), this guide focuses strictly on the fundamental architecture: **how to actually build and manage ImGui windows.**
+
+> ---
+> 🚀 **Already familiar with the basics?**
+> ---
+> If your plugin already uses an older version of `ImgWindow`, and you really just want to upgrade to using `Panel Graphics` (Vulkan/Metal instead of OpenGL), you can **skip this guide** and jump straight to the **[Panel Graphics Migration Guide](Panel-Graphics-Migration.md)**!
+
+---
+
+## 1. The Core Architecture
+
+At its core, `Dear ImGui` is renderer-agnostic. It doesn't know how to draw to a screen; it simply records your UI commands into **"draw lists"** (geometry such as vertices, draw commands, and custom texture IDs) that form the content flowing through the X-Plane 2D rendering pipeline.
+
+The `ImgWindow` framework's job is to:
+1. Provide one or more native X-Plane windows (`XPLMCreateWindowEx`).
+2. Intercept X-Plane mouse, cursor position, and keyboard events using the standard callbacks set in the `XPLMCreateWindow_t` descriptor (which `ImgWindow` manages and shunts straight into ImGui's IO system).
+3. Take the resulting ImGui **draw lists** and safely render them into the active X-Plane graphics pipeline.
+    * *Note: The framework is configured at **compile time** using build flags. You can force classic OpenGL, force Panel Graphics, or enable the "dynamic bridge" to automatically use the best backend available at runtime. See the [Migration Guide](Panel-Graphics-Migration.md) for build configurations.*
+
+To use the framework, you only need to interact with two main components:
+1. **`ImgFontAtlas`**: A shared service to load fonts and bake them into the GPU.
+2. **`ImgWindow`**: The base class you must subclass to define your specific UI windows. *(Note: You can instantiate as many unique subclasses and windows as you need!)*
+
+---
+
+## 2. Managing Fonts (`ImgFontAtlas`)
+
+Before you can render any text in ImGui, ImGui needs a "font atlas" -- a single large texture containing all the glyphs for the fonts you want to use.
+
+### Why do we have an `ImgFontAtlas` wrapper class?
+In a standard desktop app, ImGui manages its own font atlas. However, inside X-Plane, we must strictly control how and when that texture is baked and uploaded to the GPU (especially to support both OpenGL and Vulkan rendering pipelines). 
+
+Our `ImgFontAtlas` class wraps ImGui's native atlas, intercepting the texture generation process to ensure the glyphs are safely uploaded to X-Plane's VRAM.
+
+### The Contract & Lifetime
+* **Do NOT subclass `ImgFontAtlas`:** The base class provides everything you need.
+* **Shared Instance:** `ImgWindow` uses a static scoped shared pointer (`std::shared_ptr<ImgFontAtlas>`) under the hood. This means you only need to create **one** font atlas for your entire plugin. All instances of your windows will automatically share this single font texture, saving massive amounts of VRAM.
+* **Creation & Initialization:** You must create a single `ImgFontAtlas` instance and assign it to the `ImgWindow::sFontAtlas` shared pointer **before** creating your first window. Immediately after assigning it, you must configure it by loading your required fonts (or the default font). 
+  - **The Lazy Upload:** While you configure the fonts in CPU memory early, the actual VRAM upload to the GPU is handled *lazily*. `ImgWindow` automatically binds the texture for you the moment your first window begins to draw. 
+  - **Best Practice:** We recommend wrapping this setup (instantiating the atlas, linking it to `sFontAtlas`, and loading fonts) inside a global `InitializeImGui()` function. You can safely call this from `XPluginStart` or `XPluginEnable` so your fonts are fully prepped before any window creation logic fires.
+* **Teardown & Reloading:** You **must** explicitly reset the shared font atlas during `XPluginStop` (e.g., `ImgWindow::sFontAtlas.reset();`). X-Plane plugin reloading does not always physically unload the dynamic library from the OS's memory. If you leave the static shared pointer populated, it will corrupt ImGui's memory allocator when the plugin restarts, resulting in a fatal crash (especially on Linux!).
+
+### Font Setup Example
+```cpp
+// 1. Create a shared pointer to the atlas
+std::shared_ptr<ImgFontAtlas> myFontAtlas = std::make_shared<ImgFontAtlas>();
+
+// 2. Add your fonts (or just use the default)
+myFontAtlas->AddFontDefault();
+// myFontAtlas->AddFontFromFileTTF("Resources/plugins/MyPlugin/fonts/Roboto.ttf", 16.0f);
+
+// (Advanced: You can also use ImGui's MergeMode to merge symbol fonts like FontAwesome 
+// right over your base fonts here! See the `sample-code/InitializeImGui.cpp` file for 
+// advanced font merging techniques).
+
+// 3. Assign the shared atlas to the ImgWindow system
+ImgWindow::sFontAtlas = myFontAtlas;
+
+// (No need to bind the texture manually; ImgWindow handles it on the first draw frame!)
+```
+
+### Safe Teardown Example
+When your plugin is disabled or reloaded, you must safely close your windows and destroy the font atlas.
+
+> **Close Your Windows First!** Because your plugin might have multiple floating windows actively open in the simulator when the user disables your plugin, you **must** safely delete/close all your active `ImgWindow` instances *before* calling this global teardown. Otherwise, those active windows might attempt to draw on the very next frame using a null atlas, causing an immediate crash!
+
+```cpp
+void TeardownImGui() {
+    // 1. Clean up any custom loaded textures first
+    // if (myCustomTexture != (ImTextureID)0) {
+    //     ImgWindow::DeleteTexture(myCustomTexture);
+    //     myCustomTexture = (ImTextureID)0;
+    // }
+
+#if defined(IMGUI_VERSION_NUM) && (IMGUI_VERSION_NUM >= 19200) /* only on v1.92+ */
+    // 2. CRITICAL: Sever ImGui's internal reference FIRST while the managed atlas 
+    // is still alive in memory! Reversing this order creates a dangling pointer / 
+    // Use-After-Free trap when sFontAtlas.reset() frees the underlying ImFontAtlas.
+    if (ImGui::GetCurrentContext() != nullptr) {
+        ImGui::GetIO().Fonts = NULL; 
+    }
+#endif
+
+    // 3. Reset the shared pointer to release the singleton and delete the atlas
+    if (ImgWindow::sFontAtlas) {
+        ImgWindow::sFontAtlas.reset(); 
+    }
+
+    // 4. Flush the queue to ensure all deferred textures (font atlas and custom
+    // textures) are immediately deleted from VRAM!
+    ImgWindow::Shutdown();
+}
+```
+---
+
+## 3. Creating Your First Window (Customizing and Using `ImgWindow`)
+
+To create an actual window, you **must** subclass the `ImgWindow` base class. The framework relies on polymorphism to let you define your unique UI layout while it handles the heavy lifting of the XPLM window lifecycle.
+
+### 3.1 Extending `ImgWindow` for Your Plugin's Window(s)
+
+#### The `ImgWindow` Base Constructor
+When creating your custom window class, you must invoke the base `ImgWindow` constructor. The base constructor signature looks like this:
+
+```cpp
+// 1. Direct Simulator Coordinates (O.G. Style):
+ImgWindow(
+    int left, int top, int right, int bottom,
+    XPLMWindowDecoration decoration = xplm_WindowDecorationRoundRectangle,
+    XPLMWindowLayer layer = xplm_WindowLayerFloatingWindows,
+    bool cursors = false);
+
+// 2. Auto-Centered on Main Monitor (Added in v2.2.0):
+ImgWindow(
+    int width, int height,
+    XPLMWindowDecoration decoration = xplm_WindowDecorationRoundRectangle,
+    XPLMWindowLayer layer = xplm_WindowLayerFloatingWindows,
+    bool cursors = false);
+
+// 3. Via WindowGeometry Parameter Object (Added in v2.2.0):
+ImgWindow(
+    const WindowGeometry& geometry,
+    XPLMWindowDecoration decoration = xplm_WindowDecorationRoundRectangle,
+    XPLMWindowLayer layer = xplm_WindowLayerFloatingWindows,
+    bool cursors = false);
+```
+
+**Base Constructor Options:**
+* **`left, top, right, bottom`**: The initial bounds of the window in global X-Plane screen coordinates. 
+* **`width, height`**: Initial window dimensions; the window is centered automatically on the primary monitor.
+* **`geometry`**: A `WindowGeometry` parameter object (supports `WindowGeometry::Centered(w, h)`, `WindowGeometry::FromTopLeft(x, y, w, h)`, and safe out-of-bounds recovery via `WindowGeometry::Sanitize(...)`).
+* **`decoration`**: Dictates how X-Plane borders the window. The default (`xplm_WindowDecorationRoundRectangle`) provides the standard translucent X-Plane 11/12 bezel. If you want ImGui to render its own square borders and title bars without the X-Plane bezel, you can pass `xplm_WindowDecorationSelfDecorated` (or `xplm_WindowDecorationSelfDecoratedResizable`).
+* **`layer`**: Dictates the Z-order of the window. The default (`xplm_WindowLayerFloatingWindows`) keeps the window above the cockpit but below system alerts.
+* **`cursors`**: If set to true, allows ImGui to render its own *software* cursors (e.g., a hand icon over links, or an I-beam over text inputs) inside the window's content area. This provides cursor variety that X-Plane historically lacks. The framework automatically negotiates the hand-off so X-Plane retains hardware cursor control over the outer window edges for standard resizing interactions. Because ImGui's cursors are drawn during the UI frame cycle, they may feel slightly less snappy than the native X-Plane hardware cursor. By default (`false`), X-Plane strictly manages the standard hardware arrow cursor everywhere.
+
+#### Building Your Plugin's Window Class Hierarchy
+#### The Basic Subclass Pattern
+For most plugins, you will simply create one custom C++ class for each unique window in your UI, and have it inherit directly from `ImgWindow` (e.g., `class MySettingsWindow : public ImgWindow`). 
+
+*(If your plugin has many different windows that all need to share the same custom fonts, styling, or behaviors, you can create your own intermediate base class to centralize that logic. To learn how to implement that pattern, see the &rarr;[Advanced Architecture Patterns Guide](Advanced-Architecture-Patterns.md).)*
+
+For this basic guide, we will stick to the standard approach: inheriting directly from `ImgWindow`.
+#### Designing Your Subclass Constructor
+When designing your subclass, you should strongly consider hardcoding the static `ImgWindow` configuration parameters inside your subclass's initialization list, rather than forcing the caller to provide them. This keeps your instantiation code incredibly clean. 
+
+Furthermore, you should use your constructor body to set static window properties (like the title or resize limits) so they don't have to be repeatedly evaluated inside the per-frame `buildInterface()` loop.
+
+**Example of an optimized constructor:**
+```cpp
+class MySettingsWindow : public ImgWindow {
+public:
+    // Notice we don't ask the caller for decoration or layer params!
+    // We only ask for the bounds, and we pass the optimized defaults up to the base.
+    MySettingsWindow(int left, int top, int right, int bottom) 
+        : ImgWindow(left, top, right, bottom, xplm_WindowDecorationSelfDecorated) {
+        
+        // 1. Set the X-Plane window title (used by the OS and X-Plane's window manager)
+        SetWindowTitle("My Settings");
+
+        // 2. Set default sizing restrictions
+        SetWindowResizingLimits(300, 200, 800, 600);
+    }
+    
+    // ... buildInterface() ...
+};
+```
+
+### 3.2 The Required Override: `buildInterface()`
+Your subclass must implement the pure virtual method `buildInterface()`. This method is called every single frame that your window is drawn. This is where you write your standard `ImGui::` layout code.
+
+```cpp
+class MyPluginWindow : public ImgWindow {
+public:
+    MyPluginWindow(int left, int top, int right, int bottom) 
+        : ImgWindow(left, top, right, bottom) {
+        
+        SetWindowTitle("My Awesome Plugin");
+    }
+
+    // REQUIRED: Define your UI here
+    virtual void buildInterface() override {
+        ImGui::Text("Hello World from X-Plane!");
+        if (ImGui::Button("Close")) {
+            SafeDelete();
+        }
+    }
+};
+```
+
+### 3.3 Optional Overrides (Lifecycle Hooks)
+The `ImgWindow` API provides several optional hooks you can override to tightly control your window's behavior:
+
+* **`beforeBegin()`**: Called right before `ImGui::Begin()` is executed. You can use this to return specific window flags (e.g., `return ImGuiWindowFlags_MenuBar;`) or set up ImGui styling variables that apply to the whole window.
+* **`afterRendering()`**: Called after all ImGui rendering is complete, right before the XPLM draw callback returns. Useful for custom state cleanup.
+* **`onShow()`**: Called before the window is made visible. Returning `false` will suppress the window from showing.
+
+### 3.4 Runtime State & Positioning Queries
+`ImgWindow` provides several lightweight queries you can evaluate inside your `buildInterface()` draw loop to adapt your UI based on how the window is currently positioned or handled:
+
+* **`IsWindowMoving()`**: Returns `true` while the window is actively being moved or resized by the user. Useful for deferring expensive calculations, pausing high-frequency chart updates, or preventing layout thrashing during drags.
+* **`IsPoppedOut()`**: Returns `true` if the window has been popped out into an independent operating system window.
+* **`IsInVR()`**: Returns `true` if the window is currently inside the X-Plane VR world.
+* **`IsInsideSim()`**: Returns `true` if the window is floating within the 2D X-Plane simulator canvas (`!IsPoppedOut() && !IsInVR()`).
+* **`IsWindowInFront()`**: Returns `true` if the window is currently at the top of the Z-order stack.
+* **`GetVisible()`**: Returns `true` if the window is currently visible.
+
+### 3.5 VR Handling
+The `ImgWindow` framework includes built-in support for seamlessly displaying your windows in X-Plane's VR environment.
+
+By default, windows are created in the 2D layered window system (e.g., `xplm_WindowLayerFloatingWindows`). However, if a user opens your window while they are actively in VR, the framework's `moveForVR()` logic automatically intercepts this and forces the window to spawn in the VR world (`xplm_WindowVR`) instead. 
+
+*(Note: The framework checks the VR state automatically whenever you call `SetVisible(true)`. It does not continuously poll the VR state in the background. If you want an already-open 2D window to instantly teleport into VR the moment the user puts their headset on, your plugin will need to track the VR DataRef and explicitly toggle the window's visibility to trigger the transition!)*
+
+### 3.6 Safe Window Destruction
+Never use the standard C++ `delete` operator to destroy your window instance (and thus the window itself) from inside an ImGui callback (like a button press which happens in a "draw" cycle callback). Doing so will destroy the object while ImGui is still actively processing its draw tree, causing an instant crash.
+
+Instead, always call **`SafeDelete()`**, which is an `ImgWindow` helper method. This **queues the window instance for destruction**, deferring the actual deletion to a static XPLM Flight Loop Callback that safely destroys the window pointer in the `BeforeFlightModel` phase (entirely outside of the ImGui and X-Plane drawing loops).
+
+&rarr;&nbsp;_Note: don't confuse the `ImgWindow::SafeDelete()` helper method with the `ImgWindow::DeleteTexture()` method! **They serve completely different purposes!**_
+
+---
+
+## 4. Modern UI, Image Services & Optional ImGee Enhancements (`v2.3.0+` / `v2.4.0`)
+
+Core `ImgWindow` (`ImgWindow.h`) provides a built-in named texture and memory-image registry, and seamlessly pairs with **[ImGee](ImGee_User_Guide.md)** (`#include "contrib/imgee.h"`, or `"contrib.h"` for `ImgWindow`'s full community umbrella header) when you want semantic typography, first-class menus, and zero-font vector icons:
+
+### 4.1 In-Memory Image Service (`ImgWindow::RegisterNamedTexture` & `RegisterMemoryImage` — Core `ImgWindow.h`)
+Register raw RGBA pixel buffers or load static `.png`/`.jpg` byte arrays compiled into your plugin directly into GPU textures with zero disk I/O:
+```cpp
+// Option A: Raw RGBA pixel buffer (built directly into core ImgWindow.h):
+ImgWindow::RegisterNamedTexture("my_badge", g_RgbaBytes, w, h);
+
+// Option B: Compressed PNG/JPG buffer (auto-wired when contrib/imgee.h is included,
+//           or via ImgWindow::SetMemoryImageDecoder in pure core builds):
+int w = 0, h = 0;
+ImgWindow::RegisterMemoryImage("my_badge", g_PngBytes, sizeof(g_PngBytes), &w, &h);
+
+// Use anywhere in C++ (core ImgWindow.h):
+ImGui::ImageNamed("my_badge", ImVec2(32.0f, 0.0f)); // Auto-computed height!
+
+// Or in Markdown & StyledText (when opting into ImGee via #include "contrib/imgee.h"):
+ImGui::TextMD("![Badge](my_badge)");
+ImGui::StyledText("Transponder: <img name='my_badge' width=24 height=24 /> ACTIVE");
+```
+
+### 4.2 Semantic Font Roles (`ImGui::ImFontRole` — ImGee `contrib/imgee.h`)
+Instead of hardcoding raw pointer manipulations or guessing font indices, ImGee's Typography extension provides a semantic font registry:
+* **Roles:** `ImGui::ImFontRole::Regular`, `Title`, `Small`, `Bold`, `BoldLarge`, `Monospace`, `Italic`, `MonospaceMedium`, and `BoldItalic` (plus `Heading1`..`Heading3` and `Tiny`).
+* **4-Tier Fallback Hierarchy:** If an explicit font role is not configured, it gracefully falls back (e.g. `Title` → `BoldLarge` → `Bold` → `Regular` → `DefaultFont`), guaranteeing that UI text never crashes.
+* **RAII Scoped Guards:**
+  ```cpp
+  #include "contrib/imgee.h"
+
+  {
+      ImGui::ScopedFontRole guard(ImGui::ImFontRole::Title);
+      ImGui::Text("Avionics Status");
+  } // Automatically restores previous font stack state upon exiting scope
+  ```
+
+### 4.3 Directional Popups & SelectPulldown (ImGee `contrib/imgee.h`)
+* **Anchored Popups (`OpenPopupAtItem` & `BeginAnchoredPopup`)**:
+  Anchor popups above (`ImGuiPopupAnchor_AboveItem`) or below buttons with sub-pixel precision, font-scale invariant geometry, and muscle-memory toggle protection.
+* **Headroom Queries (`GetLastPopupHeight`)**:
+  Allows window subclasses (like `WidgetImgWindow`) to query exact measured popup height in pixels for dynamic XPLM window expansion.
+* **SelectPulldown**:
+  Compact 1-line dataref selectors with closed-state scroll pass-through and open-state wheel cycling.
+
+### 4.4 Procedural Vector Icons & Icon Buttons (ImGee `contrib/imgee.h`)
+Eliminates missing-glyph diamond replacement boxes (`?`) when font atlases omit extended Unicode blocks (such as arrows, chevrons, or symbols):
+* **Zero Dependencies**: Draws crisp antialiased vector geometry directly to `ImDrawList` without fonts or textures.
+* **Inline Icon Widget**:
+  ```cpp
+  ImGui::Icon("undo");
+  ImGui::Icon("caret-up", 18.0f);
+  ImGui::Icon("gear", 16.0f, &ImVec4(1.0f, 0.6f, 0.0f, 1.0f));
+  ```
+* **Interactive Button Faces (`ImGui::Markdown::Button`, `ButtonMD`, `IconButton`, `ButtonIcon`)**:
+  ```cpp
+  // 1:1 Dear ImGui drop-in Markdown button with pill face (no gray background):
+  if (ImGui::Markdown::Button("<pill orange> " ICON_FA_RETWEET " </pill>##retweet", ImVec2(32, 20))) { ... }
+
+  // Rich Markdown text button:
+  if (ImGui::ButtonMD("**Save** Changes", ImVec2(120, 24))) { ... }
+
+  // Pure vector icon button (defaults to square matching GetFrameHeight()):
+  if (ImGui::ButtonMD("<icon caret-up />##top", "Scroll to top")) { ... }
+
+  // Raw Unicode rescue (▲ -> caret-up):
+  if (ImGui::ButtonMD("▲##zoom_in", "Increase zoom")) { ... }
+
+  // Dual icon + text button:
+  if (ImGui::ButtonIcon("Settings", "gear", ImVec2(0, 0), false, "Open configuration")) { ... }
+  ```
+* **Markdown & StyledText Integration**:
+  Markdown `<icon ...>`, emoji shortcodes (`:gear:`), fallback link macros (`#[^](ICON_CARET_UP)`), and raw Unicode glyph rescue (`↺`, `▲`, `✓`, `⚙`) work out of the box with zero configuration.
+
+---
+
+## What's Next?
+Once you understand the basic usage model, you can safely write your UI code without worrying about how X-Plane actually gets it onto the screen.
+
+If you are ready to scale up your plugin with custom fonts, FontAwesome icons, global styling, or auto-positioning widgets, be sure to
+>   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr;&nbsp; read the [Advanced Architecture Patterns Guide](Advanced-Architecture-Patterns.md).
+
+If your plugin uses **Custom Textures** (e.g., drawing icons or photos using `ImGui::Image()`), or if you are interested in how this framework seamlessly bridges legacy OpenGL with X-Plane 12's modern Vulkan/Metal graphics pipeline, please
+>   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr;&nbsp; read the [Panel Graphics Migration Guide](Panel-Graphics-Migration.md).
+
+To see real-world example initialization and tear-down functions, and/or some included font files that you're free to use if you like,
+>   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr;&nbsp;start with [Sample Code README](../sample-code/README.md).
+
+For more information on this repository's overall features and history, options for configuring your builds for ImGui, how to replace an older version of `ImgWindow` with a `git submodule`, and more, you can always
+>   &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&rarr;&nbsp; return to the main [Top-Level README](../README.md).
