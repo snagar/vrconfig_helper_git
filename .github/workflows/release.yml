@@ -1,14 +1,14 @@
 # VRConfig Helper - build for Linux, Windows and macOS, and publish releases.
 #
 # When it runs (plain pushes and pull requests do NOT start it):
-#   - a pushed tag that matches one of these; it builds all three systems
-#     (Release + Debug) and publishes a GitHub Release with the plugin zip:
-#       v1.0.0, 1.0.0-release ........ release
-#       b1.0.0, 1.0.0-beta2 .......... pre-release (beta)
-#       t1.0.0, 1.0.0-test3 .......... pre-release (test build)
+#   - a pushed tag that matches one of these; it builds all three systems and
+#     publishes a GitHub Release:
+#       v1.0.0, 1.0.0-release ........ release       Release + Debug builds
+#       b1.0.0, 1.0.0-beta2 .......... pre-release   Release + Debug builds
+#       t1.0.0, 1.0.0-test3 .......... pre-release   Debug build only (faster)
 #     Any other tag is ignored.
-#   - by hand: Actions tab > "release - multi platform" > Run workflow. Builds
-#     only; the zips are kept as workflow artifacts, nothing is published.
+#   - by hand: Actions tab > "release - multi platform" > Run workflow. Debug build
+#     only; the zip is kept as a workflow artifact, nothing is published.
 #
 # The X-Plane SDK comes from the repository: libs/xpsdk/ or libs/XPSDK.zip.
 # CMake unpacks the zip by itself (any folder name inside it), so no step here
@@ -16,9 +16,9 @@
 #
 # The result of a tagged build, attached to the release:
 #   vrconfig_helper-<tag>.zip          the plugin folder, ready to copy into
-#                                      X-Plane/Resources/plugins/
-#   vrconfig_helper-<tag>-debug.zip    the Debug builds of the three plugin files
-#                                      (for troubleshooting only)
+#                                      X-Plane/Resources/plugins/ (not for test builds)
+#   vrconfig_helper-<tag>-debug.zip    the same folder with the Debug builds
+#                                      (more detail in the log; for troubleshooting)
 name: release - multi platform
 
 on:
@@ -46,8 +46,9 @@ jobs:
       kind: ${{ steps.kind.outputs.kind }}               # release | beta | test | build
       prerelease: ${{ steps.kind.outputs.prerelease }}   # true | false
       version: ${{ steps.kind.outputs.version }}         # the project's VERSION in CMakeLists.txt
+      build_types: ${{ steps.kind.outputs.build_types }} # JSON list for the build matrices
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Work out the build kind from the tag
         id: kind
@@ -64,6 +65,9 @@ jobs:
           prerelease="false"
           [[ "$kind" == "beta" || "$kind" == "test" ]] && prerelease="true"
           version=$(sed -n '/^project(vrconfig_helper/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          build_types='["Release","Debug"]'
+          [[ "$kind" == "test" || "$kind" == "build" ]] && build_types='["Debug"]'
+          echo "build_types=$build_types" >> "$GITHUB_OUTPUT"
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -83,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-#        build_type: [Release, Debug]
+        #build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
         build_type: [Debug]
     steps:
       - name: Install the build tools
@@ -96,7 +100,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends gcc-13 g++-13 make cmake libgl-dev file
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure
         run: >
@@ -119,7 +123,7 @@ jobs:
             echo "::error::The Linux plugin must not need libstdc++.so (it is linked statically)"; exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin-lin-${{ matrix.build_type }}
           path: build/${{ env.PLUGIN_NAME }}/
@@ -134,9 +138,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        # build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
+        build_type: [Debug]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure
         run: >
@@ -150,7 +155,7 @@ jobs:
         shell: bash
         run: ls -l "build/${PLUGIN_NAME}/win_x64/"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin-win-${{ matrix.build_type }}
           path: |
@@ -165,14 +170,14 @@ jobs:
   # Signed ad hoc (no Apple Developer account); see the install notes in README.md.
   build-mac:
     needs: [pre-build]
-    #if: ( 1 == 2 )
     runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
-        build_type: [Release, Debug]
+        # build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
+        build_type: [Debug]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure
         run: >
@@ -195,7 +200,7 @@ jobs:
           codesign --force --sign - "$xpl"
           codesign --verify --verbose "$xpl"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: plugin-mac-${{ matrix.build_type }}
           path: build/${{ env.PLUGIN_NAME }}/
@@ -208,42 +213,45 @@ jobs:
     permissions:
       contents: write                     # to create the GitHub Release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: download
 
-      - name: Assemble the plugin folders
+      - name: Assemble the plugin folders and zip them
+        id: zip
         shell: bash
+        env:
+          BUILD_TYPES: ${{ needs.pre-build.outputs.build_types }}
         run: |
           set -e
+          label="${GITHUB_REF_NAME//\//-}"
+          files=""
           for type in Release Debug; do
+            [[ "$BUILD_TYPES" == *"\"$type\""* ]] || continue       # only the types built
             out="dist/${type}/${PLUGIN_NAME}"
             mkdir -p "$out"
             for os in lin win mac; do
               cp -R "download/plugin-${os}-${type}/." "$out/"
             done
+            # What a user reads first, and which build this is.
+            cp LICENSE docs/VRConfig_Helper_User_Guide.txt "$out/"
+            echo "${GITHUB_REF_NAME} ${type} (${GITHUB_SHA::8})" > "$out/build.txt"
+            zip_name="${PLUGIN_NAME}-${label}.zip"
+            [[ "$type" == "Debug" ]] && zip_name="${PLUGIN_NAME}-${label}-debug.zip"
+            (cd "dist/${type}" && zip -r -9 "../../${zip_name}" "${PLUGIN_NAME}")
+            files="${files}${zip_name}"$'\n'
           done
-          # Release folder: the plugin plus what a user reads first.
-          cp LICENSE "dist/Release/${PLUGIN_NAME}/"
-          cp docs/VRConfig_Helper_User_Guide.txt "dist/Release/${PLUGIN_NAME}/"
-          echo "${GITHUB_REF_NAME} (${GITHUB_SHA::8})" > "dist/Release/${PLUGIN_NAME}/build.txt"
           find dist -type f | sort
-
-      - name: Zip
-        id: zip
-        shell: bash
-        run: |
-          set -e
-          label="${GITHUB_REF_NAME//\//-}"
-          (cd dist/Release && zip -r -9 "../../${PLUGIN_NAME}-${label}.zip" "${PLUGIN_NAME}")
-          (cd dist/Debug   && zip -r -9 "../../${PLUGIN_NAME}-${label}-debug.zip" "${PLUGIN_NAME}")
-          echo "release_zip=${PLUGIN_NAME}-${label}.zip" >> "$GITHUB_OUTPUT"
-          echo "debug_zip=${PLUGIN_NAME}-${label}-debug.zip" >> "$GITHUB_OUTPUT"
           ls -l *.zip
+          {
+            echo "files<<EOF"
+            printf '%s' "$files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.PLUGIN_NAME }}-all-platforms
           path: "*.zip"
@@ -263,6 +271,4 @@ jobs:
           name: "${{ needs.pre-build.outputs.kind }}: ${{ github.ref_name }}"
           body_path: notes.md
           prerelease: ${{ needs.pre-build.outputs.prerelease == 'true' }}
-          files: |
-            ${{ steps.zip.outputs.release_zip }}
-            ${{ steps.zip.outputs.debug_zip }}
+          files: ${{ steps.zip.outputs.files }}

@@ -16,6 +16,7 @@
 
 #include "Log.h"
 #include "util/FileUtil.h"
+#include "util/Number.h"
 
 namespace hpvr::vrconfig {
 
@@ -83,8 +84,7 @@ bool ParseNumber(std::string_view token, double& out)
         token.remove_prefix(1);
     if (token.empty())
         return false;
-    const auto result = std::from_chars(token.data(), token.data() + token.size(), out);
-    return result.ec == std::errc() && result.ptr == token.data() + token.size();
+    return util::ParseDouble(token, out);
 }
 
 // Reads exactly `count` numbers from `rest`; extra tokens are an error.

@@ -9,6 +9,7 @@
 #include <system_error>
 
 #include "vrconfig/VrConfigFile.h"
+#include "util/Number.h"
 
 namespace hpvr::manip {
 
@@ -361,8 +362,7 @@ bool IsNumber(std::string_view text)
     if (text.empty())
         return false;
     double value = 0.0;
-    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
-    return result.ec == std::errc() && result.ptr == text.data() + text.size();
+    return util::ParseDouble(text, value);
 }
 
 // --- checks ----------------------------------------------------------------------------------------
