@@ -195,6 +195,11 @@ target_include_directories(imgwindow SYSTEM PUBLIC "${IMGWINDOW_DIR}")
 # legacy OpenGL on older versions - one binary for both.
 target_compile_definitions(imgwindow PUBLIC IMGWINDOW_USE_PANEL_GRAPHICS)
 target_link_libraries(imgwindow PUBLIC imgui xpsdk OpenGL::GL)
+# macOS: ImgWindow reads the keyboard's modifier keys with CGEventSourceFlagsState(),
+# which is in Apple's CoreGraphics framework.
+if(APPLE)
+    target_link_libraries(imgwindow PUBLIC "-framework CoreGraphics")
+endif()
 # Windows: the SDK has GL/gl.h but no GL/glext.h, which ImgWindow's SystemGL.h
 # includes. The repository supplies it as libs/GL/glext.h, with the header it needs
 # as libs/GL/KHR/khrplatform.h; ImgWindow itself is not changed. Linux uses the system's
