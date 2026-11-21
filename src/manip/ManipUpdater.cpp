@@ -56,7 +56,7 @@ UpdaterOpen ManipUpdater::Open(const fs::path& vrconfigPath, bool forLoadedAircr
 {
     if (mOpen && mFile.FilePath() == vrconfigPath && ChangeCount() > 0) {
         mForLoadedAircraft = forLoadedAircraft;
-        LOG_INFO("keeping {} unsaved manipulator updates of {}", ChangeCount(), vrconfigPath.filename().string());
+        LOG_INFO("keeping {} unsaved manipulator updates of {}", ChangeCount(), util::Utf8(vrconfigPath.filename()));
         return UpdaterOpen::KeptChanges;
     }
     const bool samePath = mOpen && mFile.FilePath() == vrconfigPath;
@@ -69,7 +69,7 @@ UpdaterOpen ManipUpdater::Open(const fs::path& vrconfigPath, bool forLoadedAircr
 
     std::error_code ec;
     if (vrconfigPath.empty() || !fs::exists(vrconfigPath, ec)) {
-        mLastError = std::format("no vrconfig file: {}", vrconfigPath.string());
+        mLastError = std::format("no vrconfig file: {}", util::Utf8(vrconfigPath));
         LOG_INFO("{}", mLastError);
         return UpdaterOpen::NoFile;
     }
@@ -79,14 +79,14 @@ UpdaterOpen ManipUpdater::Open(const fs::path& vrconfigPath, bool forLoadedAircr
     }
     mLoadedText = mFile.Text();
     mOpen = true;
-    LOG_INFO("{}: {} manipulator blocks", vrconfigPath.filename().string(), mFile.Manips().size());
+    LOG_INFO("{}: {} manipulator blocks", util::Utf8(vrconfigPath.filename()), mFile.Manips().size());
     return UpdaterOpen::Opened;
 }
 
 void ManipUpdater::Discard()
 {
     if (mOpen && ChangeCount() > 0)
-        LOG_INFO("{} unsaved manipulator updates of {} discarded", ChangeCount(), mFile.FilePath().filename().string());
+        LOG_INFO("{} unsaved manipulator updates of {} discarded", ChangeCount(), util::Utf8(mFile.FilePath().filename()));
     mFile = vrconfig::VrConfigFile{};
     mLoadedText.clear();
     mPending.clear();
@@ -192,7 +192,7 @@ SaveResult ManipUpdater::Save(bool overwriteOutsideChanges)
         return SaveResult::NothingToSave;
     if (!overwriteOutsideChanges && ChangedOnDisk()) {
         mLastError = "the file was changed outside VRConfig Helper since it was read";
-        LOG_WARN("{}: {}", mFile.FilePath().string(), mLastError);
+        LOG_WARN("{}: {}", util::Utf8(mFile.FilePath()), mLastError);
         return SaveResult::ChangedOnDisk;
     }
 
@@ -223,14 +223,14 @@ SaveResult ManipUpdater::Save(bool overwriteOutsideChanges)
             LOG_WARN("{} changed blocks are no longer in the file - not saved", lost);
     }
 
-    const std::string backupKey = BackupPath().string();
+    const std::string backupKey = util::Utf8(BackupPath());
     if (!BackedUpThisRun().contains(backupKey)) {
         if (!util::CopyFileSafely(mFile.FilePath(), BackupPath(), mLastError)) {
             LOG_ERROR("backup failed, nothing saved: {}", mLastError);
             return SaveResult::Failed;
         }
         BackedUpThisRun().insert(backupKey);
-        LOG_INFO("backup written: {}", BackupPath().string());
+        LOG_INFO("backup written: {}", util::Utf8(BackupPath()));
     }
 
     // Last block first, so the indexes of the earlier ones stay valid.
@@ -294,7 +294,7 @@ bool ManipUpdater::HasBackup() const
 
 bool ManipUpdater::BackupMadeThisRun() const
 {
-    return mOpen && BackedUpThisRun().contains(BackupPath().string());
+    return mOpen && BackedUpThisRun().contains(util::Utf8(BackupPath()));
 }
 
 std::optional<ManipUpdater::Clock::time_point> ManipUpdater::BackupTime() const
@@ -319,7 +319,7 @@ bool ManipUpdater::RestoreBackup()
         LOG_ERROR("restore failed: {}", mLastError);
         return false;
     }
-    LOG_INFO("restored {} from its updater backup", file.string());
+    LOG_INFO("restored {} from its updater backup", util::Utf8(file));
     if (ChangeCount() > 0)
         LOG_INFO("{} unsaved manipulator updates dropped by the restore", ChangeCount());
     const bool forLoaded = mForLoadedAircraft;

@@ -36,7 +36,7 @@ std::uint64_t ObjScanner::Start(const std::filesystem::path& acfFile, const Mani
     ++mScanId;
 
     // Everything the thread uses is copied into it.
-    mThread = std::jthread([this, acfFile, types](std::stop_token stop) {
+    mThread = util::StopThread([this, acfFile, types](util::StopToken stop) {
         AircraftScan result = ScanAircraft(acfFile, types, stop, &mProgress);
         std::lock_guard lock(mMutex);
         if (!result.aborted && !stop.stop_requested())

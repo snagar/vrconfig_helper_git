@@ -28,7 +28,7 @@ bool CopyFileSafely(const fs::path& from, const fs::path& to, std::string& error
     if (!ec)
         fs::rename(tmp, to, ec);
     if (ec) {
-        error = std::format("cannot copy {} to {}: {}", from.string(), to.string(), ec.message());
+        error = std::format("cannot copy {} to {}: {}", util::Utf8(from), util::Utf8(to), ec.message());
         fs::remove(tmp, ec);
         return false;
     }
@@ -42,13 +42,13 @@ bool WriteFileSafely(const fs::path& path, const std::string& text, std::string&
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         if (!out) {
-            error = std::format("cannot write {}", tmp.string());
+            error = std::format("cannot write {}", util::Utf8(tmp));
             return false;
         }
         out.write(text.data(), static_cast<std::streamsize>(text.size()));
         out.flush();
         if (!out) {
-            error = std::format("write failed: {}", tmp.string());
+            error = std::format("write failed: {}", util::Utf8(tmp));
             std::error_code ec;
             fs::remove(tmp, ec);
             return false;
@@ -57,7 +57,7 @@ bool WriteFileSafely(const fs::path& path, const std::string& text, std::string&
     std::error_code ec;
     fs::rename(tmp, path, ec);
     if (ec) {
-        error = std::format("cannot replace {}: {}", path.string(), ec.message());
+        error = std::format("cannot replace {}: {}", util::Utf8(path), ec.message());
         fs::remove(tmp, ec);
         return false;
     }

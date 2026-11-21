@@ -17,6 +17,7 @@
 #include "ui/Theme.h"
 #include "ui/Widgets.h"
 #include "vrconfig/VrConfigFile.h"
+#include "util/FileUtil.h"
 
 namespace hpvr::manip {
 
@@ -193,14 +194,14 @@ void UpdaterPage::RebuildChoices()
     const fs::path loadedFolder = mLoaded ? mLoaded->acfFile.parent_path() : fs::path();
     std::set<std::string> listed;
     auto lmbda_add = [&](const fs::path& acf, bool sameFolder) {
-        if (!listed.insert(acf.lexically_normal().string()).second)
+        if (!listed.insert(util::Utf8(acf.lexically_normal())).second)
             return;
         Choice choice;
         choice.acfFile    = acf;
         choice.sameFolder = sameFolder;
         choice.loaded     = mLoaded && acf.lexically_normal() == mLoaded->acfFile.lexically_normal();
         if (sameFolder) {
-            choice.label = acf.filename().string();
+            choice.label = util::Utf8(acf.filename());
         } else {
             std::error_code ec;
             const fs::path relative = fs::relative(acf, xp::GetAircraftFolder(), ec);
@@ -217,7 +218,7 @@ void UpdaterPage::RebuildChoices()
         for (const fs::path& acf : *mAllAcf)
             lmbda_add(acf, !loadedFolder.empty() && acf.parent_path().lexically_normal() == loadedFolder.lexically_normal());
     }
-    if (!mChosenAcf.empty() && !listed.contains(mChosenAcf.lexically_normal().string()))
+    if (!mChosenAcf.empty() && !listed.contains(util::Utf8(mChosenAcf.lexically_normal())))
         lmbda_add(mChosenAcf, !loadedFolder.empty() && mChosenAcf.parent_path() == loadedFolder);  // keep the choice
 }
 
@@ -227,7 +228,7 @@ void UpdaterPage::PollFinder()
         return;
     if (auto result = mFinder.TakeResult()) {
         mAllAcf = std::move(result);
-        LOG_INFO("found {} aircraft under {}", mAllAcf->size(), xp::GetAircraftFolder().string());
+        LOG_INFO("found {} aircraft under {}", mAllAcf->size(), util::Utf8(xp::GetAircraftFolder()));
         RebuildChoices();
     }
 }
@@ -265,7 +266,7 @@ void UpdaterPage::ReadVrconfig()
     mReadAcf = mChosenAcf;
     mTypeChecked.clear();                                        // every type shown again
     mGroupFilter.reset();
-    LOG_INFO("updater: read {} ({})", vrconfig.string(), ChosenIsLoaded() ? "loaded aircraft" : "not loaded");
+    LOG_INFO("updater: read {} ({})", util::Utf8(vrconfig), ChosenIsLoaded() ? "loaded aircraft" : "not loaded");
 
     // The aircraft's OBJ files, in the background.
     mObjManips.clear();
@@ -294,7 +295,7 @@ void UpdaterPage::PollObjScan()
         if (file.object.exists)
             files.push_back(&file);
         else
-            LOG_WARN("{} lists {} - not found", result->acfFile.filename().string(), file.object.listedAs);
+            LOG_WARN("{} lists {} - not found", util::Utf8(result->acfFile.filename()), file.object.listedAs);
         for (const std::string& problem : file.problems)
             LOG_WARN("read: {}", problem);
     }
@@ -425,7 +426,7 @@ void UpdaterPage::ui_header()
     ImGui::BeginGroup();
     ui::ui_text_ellipsis("VRConfig Manipulator Updater", textW);
     if (mUpdater.IsOpen())
-        ui::ui_text_ellipsis(mUpdater.FilePath().filename().string(), textW, &theme::kTextDisabled);
+        ui::ui_text_ellipsis(util::Utf8(mUpdater.FilePath().filename()), textW, &theme::kTextDisabled);
     else
         ui::ui_text_ellipsis(mLoaded ? mLoaded->displayName : std::string("No aircraft"), textW, &theme::kTextDisabled);
     ImGui::EndGroup();
@@ -469,7 +470,7 @@ void UpdaterPage::ui_step_aircraft()
             if (ImGui::Selectable(label.c_str(), choice.acfFile == mChosenAcf)) {
                 if (choice.acfFile != mChosenAcf) {
                     mChosenAcf = choice.acfFile;
-                    LOG_INFO_AS("lmbda_chooseAircraft", "updater: chose {}", choice.acfFile.string());
+                    LOG_INFO_AS("lmbda_chooseAircraft", "updater: chose {}", util::Utf8(choice.acfFile));
                 }
             }
             ImGui::PopStyleColor();
@@ -484,7 +485,7 @@ void UpdaterPage::ui_step_aircraft()
         mListAll = listAll;
         if (mListAll && !mAllAcf && !mFinder.Running()) {
             mFinder.Start(xp::GetAircraftFolder());
-            LOG_INFO("searching aircraft under {}", xp::GetAircraftFolder().string());
+            LOG_INFO("searching aircraft under {}", util::Utf8(xp::GetAircraftFolder()));
         }
         if (!mListAll)
             mFinder.Abort();
@@ -573,7 +574,7 @@ void UpdaterPage::ui_step_read()
         const float textW = right - ImGui::GetCursorPosX();
         if (!chosenRead) {
             ui::ui_text_ellipsis(mChosenAcf.empty() ? std::string("Choose an aircraft first")
-                                                    : vrconfig::VrConfigPathFor(mChosenAcf).filename().string(),
+                                                    : util::Utf8(vrconfig::VrConfigPathFor(mChosenAcf).filename()),
                                  textW, &theme::kTextDisabled);
             ui::ui_text_ellipsis("Press Read vrconfig to list its blocks", textW, &theme::kTextDisabled);
         } else if (mOpenResult == UpdaterOpen::NoFile) {

@@ -23,7 +23,7 @@ bool RuleFile::Read(std::string& text)
     mCustom = fs::exists(CustomPath(), ec);
     mPath   = mCustom ? CustomPath() : (fs::exists(DefaultPath(), ec) ? DefaultPath() : fs::path());
     text    = mPath.empty() ? std::string() : util::ReadAll(mPath);
-    const std::size_t hash = std::hash<std::string>{}(mPath.string() + '\n' + text);
+    const std::size_t hash = std::hash<std::string>{}(util::Utf8(mPath) + '\n' + text);
     if (mHash && *mHash == hash)
         return false;
     mHash = hash;
@@ -32,7 +32,7 @@ bool RuleFile::Read(std::string& text)
 
 std::string RuleFile::UsedName() const
 {
-    return mPath.empty() ? mName : mPath.filename().string();
+    return mPath.empty() ? mName : util::Utf8(mPath.filename());
 }
 
 std::string RuleFile::Notice(int fileVersion) const

@@ -26,6 +26,7 @@
 #include "PluginWindow.h"
 #include "xp/Aircraft.h"
 #include "hotspot/SpotEditor.h"
+#include "util/FileUtil.h"
 
 #ifndef VRCONFIG_HELPER_VERSION
 #define VRCONFIG_HELPER_VERSION "0.0.0"
@@ -59,8 +60,8 @@ fs::path PluginFolder()
 {
     char path[1024] = {};
     XPLMGetPluginInfo(XPLMGetMyID(), nullptr, path, nullptr, nullptr);
-    fs::path dir = fs::path(path).parent_path();
-    const std::string sub = dir.filename().string();
+    fs::path dir = hpvr::util::PathFromUtf8(path).parent_path();
+    const std::string sub = hpvr::util::Utf8(dir.filename());
     if (sub.size() > 4 && sub.compare(sub.size() - 4, 4, "_x64") == 0)
         dir = dir.parent_path();
     return dir;
@@ -126,7 +127,7 @@ PLUGIN_API int XPluginStart(char* outName, char* outSig, char* outDesc)
 
     hpvr::log::Init(kPluginId, PluginFolder());
     LOG_INFO("{} version {} starting, log file: {}", kPluginName, VRCONFIG_HELPER_VERSION,
-             hpvr::log::GetLogFilePath().string());
+             hpvr::util::Utf8(hpvr::log::GetLogFilePath()));
 
     gCmdToggle = XPLMCreateCommand("vrconfig_helper/toggle_main_window",
                                    "VRConfig Helper: show/hide the window");

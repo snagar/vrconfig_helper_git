@@ -1,6 +1,7 @@
 // hpvr - manipulators of the aircraft's OBJ files
 
 #include "ObjManips.h"
+#include "util/FileUtil.h"
 
 #include <algorithm>
 #include <cctype>
@@ -66,7 +67,7 @@ std::vector<std::string> FillTemplate(const ManipTypeDef& def, const ManipTypeSe
     for (std::string line : def.lines) {
         ReplaceAll(line, "{deg}", degrees);
         ReplaceAll(line, "{name}", manip.DisplayName());
-        ReplaceAll(line, "{file}", manip.objFile.filename().string());
+        ReplaceAll(line, "{file}", util::Utf8(manip.objFile.filename()));
         body.push_back(std::move(line));
     }
     return body;
@@ -153,7 +154,7 @@ bool StampsChanged(const std::vector<FileStamp>& stamps)
 namespace {
 
 // One file, click areas merged within it. `bytesBefore`: progress of the files before it.
-ObjFileScan ScanOneFile(const AcfObject& object, const ManipTypeSet& types, std::stop_token stop,
+ObjFileScan ScanOneFile(const AcfObject& object, const ManipTypeSet& types, util::StopToken stop,
                         ScanProgress* progress, std::uintmax_t& bytesBefore, bool& aborted)
 {
     ObjFileScan scan;
@@ -166,7 +167,7 @@ ObjFileScan ScanOneFile(const AcfObject& object, const ManipTypeSet& types, std:
 
     std::ifstream in(object.path, std::ios::binary);
     if (!in) {
-        scan.problems.push_back(std::format("cannot read {}", object.path.filename().string()));
+        scan.problems.push_back(std::format("cannot read {}", util::Utf8(object.path.filename())));
         return scan;
     }
     std::map<std::string, std::size_t> byKey;          // key -> index in scan.manips
@@ -207,7 +208,7 @@ ObjFileScan ScanOneFile(const AcfObject& object, const ManipTypeSet& types, std:
         }
         if (static_cast<int>(params.size()) < def->params) {
             if (++problemCount <= kMaxProblems)
-                scan.problems.push_back(std::format("{} line {}: {} needs {} values", object.path.filename().string(),
+                scan.problems.push_back(std::format("{} line {}: {} needs {} values", util::Utf8(object.path.filename()),
                                                     lineNumber, keyword, def->params));
             continue;
         }
@@ -245,7 +246,7 @@ ObjFileScan ScanOneFile(const AcfObject& object, const ManipTypeSet& types, std:
         scan.manips.push_back(std::move(manip));
     }
     if (problemCount > kMaxProblems)
-        scan.problems.push_back(std::format("{}: ... and {} more", object.path.filename().string(),
+        scan.problems.push_back(std::format("{}: ... and {} more", util::Utf8(object.path.filename()),
                                             problemCount - kMaxProblems));
     bytesBefore += bytesInFile;
     return scan;
@@ -263,7 +264,7 @@ std::vector<AcfObject> ReadAcfObjects(const fs::path& acfFile, std::string& erro
     std::vector<AcfObject> objects;
     std::ifstream in(acfFile, std::ios::binary);
     if (!in) {
-        error = std::format("cannot read {}", acfFile.string());
+        error = std::format("cannot read {}", util::Utf8(acfFile));
         return objects;
     }
     constexpr std::string_view kPrefix = "P _obja/";
@@ -295,7 +296,7 @@ std::vector<AcfObject> ReadAcfObjects(const fs::path& acfFile, std::string& erro
         std::string slashes = written;
         std::replace(slashes.begin(), slashes.end(), '\\', '/');
         AcfObject object;
-        object.path     = (objectsFolder / fs::path(slashes)).lexically_normal();
+        object.path     = (objectsFolder / util::PathFromUtf8(slashes)).lexically_normal();
         object.listedAs = written;
         std::error_code ec;
         object.exists   = fs::is_regular_file(object.path, ec);
@@ -305,8 +306,8 @@ std::vector<AcfObject> ReadAcfObjects(const fs::path& acfFile, std::string& erro
 
     // X-Plane 10/11: the cockpit object is found by its name, not listed.
     AcfObject cockpit;
-    cockpit.path     = (acfFile.parent_path() / (acfFile.stem().string() + "_cockpit.obj")).lexically_normal();
-    cockpit.listedAs = cockpit.path.filename().string();
+    cockpit.path     = (acfFile.parent_path() / (acfFile.stem().u8string() + u8"_cockpit.obj")).lexically_normal();
+    cockpit.listedAs = util::Utf8(cockpit.path.filename());
     cockpit.byName   = true;
     std::error_code ec;
     cockpit.exists   = fs::is_regular_file(cockpit.path, ec);
@@ -354,13 +355,13 @@ ObjScanResult CombineScans(const std::vector<const ObjFileScan*>& files, const M
 }
 
 ObjScanResult ScanObjFiles(const std::vector<fs::path>& files, const ManipTypeSet& types,
-                           std::stop_token stop, ScanProgress* progress)
+                           util::StopToken stop, ScanProgress* progress)
 {
     std::vector<AcfObject> objects;
     for (const fs::path& file : files) {
         AcfObject object;
         object.path = file;
-        object.listedAs = file.filename().string();
+        object.listedAs = util::Utf8(file.filename());
         std::error_code ec;
         object.exists = fs::is_regular_file(file, ec);
         objects.push_back(object);
@@ -390,13 +391,13 @@ ObjScanResult ScanObjFiles(const std::vector<fs::path>& files, const ManipTypeSe
     ObjScanResult result = CombineScans(all, types);
     for (const AcfObject& object : objects) {
         if (!object.exists)
-            result.problems.push_back(std::format("cannot read {}", object.path.filename().string()));
+            result.problems.push_back(std::format("cannot read {}", util::Utf8(object.path.filename())));
     }
     result.aborted = aborted;
     return result;
 }
 
-AircraftScan ScanAircraft(const fs::path& acfFile, const ManipTypeSet& types, std::stop_token stop,
+AircraftScan ScanAircraft(const fs::path& acfFile, const ManipTypeSet& types, util::StopToken stop,
                           ScanProgress* progress)
 {
     AircraftScan scan;

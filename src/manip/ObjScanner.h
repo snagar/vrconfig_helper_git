@@ -46,7 +46,7 @@ public:
 private:
     void Stop();                    // request stop + join
 
-    std::jthread                 mThread;
+    util::StopThread                 mThread;
     ScanProgress                 mProgress;
     mutable std::mutex           mMutex;
     std::optional<AircraftScan>  mResult;        // set by the thread when done

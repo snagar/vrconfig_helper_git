@@ -51,36 +51,67 @@ src/
                      Updater page: ManipActions (manip_actions.ini), ManipBlock (one block: read,
                      apply settings, check typed text), ManipUpdater (edit session, .manip.upd.bak),
                      AircraftFinder (.acf files, background search), UpdaterPage (the page)
-  util/              FileUtil: ReadAll, CopyFileSafely, WriteFileSafely (temporary file + rename)
+  util/              FileUtil: ReadAll, CopyFileSafely, WriteFileSafely (temporary file + rename),
+                     Utf8 / PathFromUtf8 (paths as UTF-8 on every system);
+                     StopThread: background thread that can be asked to stop
   xp/                Aircraft: user aircraft path, pilot head position (X-Plane datarefs)
 libs/
   manip_types.ini    manipulator types (shipped next to the plugin)
   manip_actions.ini  ACTION conversions and block settings (shipped next to the plugin)
-  fetch_libs.sh      downloads xpsdk, imgui and ImgWindow
-  xpsdk/             X-Plane SDK 4.4.0-r2   (libs/fetch_libs.sh)
-  imgui/             Dear ImGui v1.92.8     (libs/fetch_libs.sh)
-  ImgWindow/         ImgWindow v2.4.1       (libs/fetch_libs.sh)
+  XPSDK.zip          X-Plane SDK (unpacked by CMake into the build folder), or
+  xpsdk/             the SDK already unpacked (used first when present)
+  imgui/             Dear ImGui v1.92.8     (kept in the repo - not fetched)
+  ImgWindow/         ImgWindow v2.4.1       (kept in the repo - not fetched)
   loguru/            loguru 2.2 (locally patched preamble - kept in the repo)
   fonts/             IconsFontAwesome5.h, fa-solid-900.inc/.ttf (kept in the repo)
 ```
 
-## Build (Linux)
+## Build
 
-Requirements: CMake 3.16+, GCC 13+ / Clang 17+ (C++20, `std::format`), OpenGL headers
-(`sudo apt install libgl-dev` on Debian/Ubuntu).
+The same commands on Linux, Windows and macOS:
 
 ```
-./libs/fetch_libs.sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+cmake --build build --config Release -j
 cmake --install build --prefix "<X-Plane>/Resources/plugins"
 ```
 
-Result: `<X-Plane>/Resources/plugins/vrconfig_helper/lin_x64/vrconfig_helper.xpl`
+Result, in the X-Plane plugin layout:
+`build/vrconfig_helper/<lin_x64|win_x64|mac_x64>/vrconfig_helper.xpl` plus the two
+`.ini` rule files in `build/vrconfig_helper/`. On Linux each build is also copied into
+the X-Plane folders listed in `VRCH_DEPLOY_XP_ROOTS` (turn off with `-DVRCH_DEPLOY=OFF`).
 
-Dear ImGui, ImgWindow, loguru, libstdc++ and libgcc are linked statically. The plugin
-needs only `libGL.so.1` and glibc at runtime. Build on the oldest Linux you want
-to support (the binary requires that system's glibc version or newer).
+Requirements:
+
+* **All:** CMake 3.20+, a C++20 compiler with `std::format`.
+* **Linux:** GCC 13+ or Clang 17+, OpenGL headers (`sudo apt install libgl-dev`).
+  ImGui, ImgWindow, loguru, libstdc++ and libgcc are linked statically; the plugin
+  needs only `libGL.so.1` and glibc (the version of the system it was built on, or newer).
+* **Windows:** Visual Studio 2022 (MSVC), 64-bit (`-G "Visual Studio 17 2022" -A x64`).
+  The C++ runtime is linked into the plugin (`/MT`).
+* **macOS:** Xcode 15+. One file for Apple Silicon and Intel (`x86_64;arm64`),
+  macOS 13.3 or newer (`std::format`).
+
+**X-Plane SDK:** CMake uses, first found: `-DXPSDK_DIR=<folder>`, `libs/xpsdk/`, or
+`libs/XPSDK.zip` (unpacked into `<build>/xpsdk_unpacked/`; the folder name inside the
+zip does not matter). The SDK zip must contain `Libraries/Win/XPLM_64.lib` and
+`Libraries/Mac/XPLM.framework`. Only the X-Plane 11 API levels are enabled
+(`XPLM200`-`XPLM303`), so the plugin loads in X-Plane 11.50+ and 12.
+
+## Releases (GitHub Actions)
+
+`.github/workflows/release.yml` builds Linux (inside Ubuntu 22.04, GCC 13), Windows
+(MSVC) and macOS (Universal 2, signed ad hoc), each as Release and Debug:
+
+* **Every push / pull request:** build only; the zips are kept as workflow artifacts.
+* **A tag:** also a GitHub Release with `vrconfig_helper-<tag>.zip` (the plugin
+  folder for all three systems, LICENSE, the text user guide) and
+  `vrconfig_helper-<tag>-debug.zip`. `v1.0.0` / `…-release` = release;
+  `b…` / `…-beta…` and `t…` / `…-test…` = pre-release; other tags = build only.
+  The release text is `notes.md` when it exists.
+
+**macOS users:** the plugin is not notarized by Apple. If macOS blocks it, run once
+in Terminal: `xattr -cr "<X-Plane>/Resources/plugins/vrconfig_helper"`.
 
 ## Rendering
 

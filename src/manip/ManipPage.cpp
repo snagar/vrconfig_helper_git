@@ -15,6 +15,7 @@
 #include "hotspot/SpotEditor.h"     // ClockTime
 #include "ui/Theme.h"
 #include "ui/Widgets.h"
+#include "util/FileUtil.h"
 
 namespace hpvr::manip {
 
@@ -187,7 +188,7 @@ void ManipPage::ReadFiles(bool extractWhenDone)
     mExtractWhenDone = extractWhenDone;
     mScanner.Start(mAircraft->acfFile, mTypes);
     mReadState = ReadState::Reading;
-    LOG_INFO("reading the objects of {}", mAircraft->acfFile.filename().string());
+    LOG_INFO("reading the objects of {}", util::Utf8(mAircraft->acfFile.filename()));
 }
 
 void ManipPage::PollRead()
@@ -211,7 +212,7 @@ void ManipPage::PollRead()
     for (const ObjFileScan& file : mAircraftScan->files) {
         if (!file.object.exists) {
             ++missing;
-            LOG_WARN("{} lists {} - not found", mAircraftScan->acfFile.filename().string(), file.object.listedAs);
+            LOG_WARN("{} lists {} - not found", util::Utf8(mAircraftScan->acfFile.filename()), file.object.listedAs);
         }
         if (file.ControlCount() > 0)
             ++withManips;
@@ -226,12 +227,12 @@ void ManipPage::PollRead()
     // Same files as the confirmed choice (Extract read them again): keep it.
     std::set<std::string> paths;
     for (const ObjFileScan& file : mAircraftScan->files)
-        paths.insert(file.object.path.string());
+        paths.insert(util::Utf8(file.object.path));
     std::vector<char> ticked(mAircraftScan->files.size(), 0);
     bool sameFiles = mFilesConfirmed;
     for (std::size_t i = 0; i < ticked.size(); ++i) {
         if (mFilesConfirmed)
-            ticked[i] = mConfirmedPaths.contains(mAircraftScan->files[i].object.path.string()) && FileUsable(i);
+            ticked[i] = mConfirmedPaths.contains(util::Utf8(mAircraftScan->files[i].object.path)) && FileUsable(i);
         else
             ticked[i] = FileUsable(i);                 // default: every file with manipulators
     }
@@ -262,7 +263,7 @@ void ManipPage::UseFiles(const std::vector<char>& ticked)
     for (std::size_t i = 0; i < mFileTicked.size(); ++i) {
         if (mFileTicked[i]) {
             selected.push_back(&mAircraftScan->files[i]);
-            mConfirmedPaths.insert(mAircraftScan->files[i].object.path.string());
+            mConfirmedPaths.insert(util::Utf8(mAircraftScan->files[i].object.path));
         }
     }
     mSelected = CombineScans(selected, mTypes);
@@ -339,7 +340,7 @@ void ManipPage::ui_header()
     ImGui::BeginGroup();
     ui::ui_text_ellipsis(mAircraft ? mAircraft->displayName : std::string("No aircraft"), textW);
     if (mAircraft) {
-        const std::string file = mAircraft->vrconfigFile.filename().string();
+        const std::string file = util::Utf8(mAircraft->vrconfigFile.filename());
         ui::ui_text_ellipsis(mEditor.IsOpen() && !mEditor.FileOnDisk() ? file + " (new)" : file, textW,
                              &theme::kTextDisabled);
     }
@@ -359,7 +360,7 @@ void ManipPage::ui_step_files()
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const float right = ImGui::GetContentRegionMax().x;
-    const std::string acfName = mAircraft->acfFile.filename().string();
+    const std::string acfName = util::Utf8(mAircraft->acfFile.filename());
 
     if (mReadState == ReadState::Reading) {
         const char* abort  = ICON_FA_STOP " Abort";
@@ -887,7 +888,7 @@ void ManipPage::ui_popup_files()
     ImGui::PushStyleColor(ImGuiCol_Text, theme::kTextDisabled);
     ui::ui_wrapped_text(std::format("The objects listed in {}. Tick the files to take manipulators from; "
                                     "files without manipulators are greyed out.",
-                                    mAircraftScan->acfFile.filename().string()));
+                                    util::Utf8(mAircraftScan->acfFile.filename())));
     ImGui::PopStyleColor();
 
     const ImGuiStyle& style = ImGui::GetStyle();
@@ -916,7 +917,7 @@ void ManipPage::ui_popup_files()
                 // The file name first (never clipped), then its folder relative to the aircraft, in grey.
                 std::error_code ec;
                 const fs::path relative = fs::relative(file.object.path, mAircraftScan->acfFile.parent_path(), ec);
-                const std::string name   = file.object.path.filename().string();
+                const std::string name   = util::Utf8(file.object.path.filename());
                 std::string folder = ec ? std::string() : relative.parent_path().generic_string();
                 if (file.object.byName)
                     folder = folder.empty() ? "by name" : folder + ", by name";
@@ -1018,7 +1019,7 @@ void ManipPage::ui_popup_type_list()
                         ImGui::TextDisabled("%s", manip.DisplayName().c_str());
                     ImGui::TableSetColumnIndex(1);
                     ImGui::AlignTextToFramePadding();
-                    ImGui::TextDisabled("%s", manip.objFile.filename().string().c_str());
+                    ImGui::TextDisabled("%s", util::Utf8(manip.objFile.filename()).c_str());
                     ImGui::PopID();
                 }
             }

@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <mutex>
 #include <optional>
-#include <stop_token>
+#include "util/StopThread.h"
 #include <thread>
 #include <vector>
 
@@ -24,7 +24,7 @@ std::vector<std::filesystem::path> ListAcfInFolder(const std::filesystem::path& 
 
 // Every .acf below `root`, sorted by path; liveries, plugins and objects folders
 // are skipped. Stops early (partial result) when `stop` is requested.
-std::vector<std::filesystem::path> FindAllAcf(const std::filesystem::path& root, std::stop_token stop = {},
+std::vector<std::filesystem::path> FindAllAcf(const std::filesystem::path& root, util::StopToken stop = {},
                                               std::atomic<std::size_t>* foldersSeen = nullptr);
 
 class AircraftFinder {
@@ -45,7 +45,7 @@ public:
 private:
     void Stop();
 
-    std::jthread                                      mThread;
+    util::StopThread                                      mThread;
     std::atomic<std::size_t>                          mFoldersSeen{0};
     mutable std::mutex                                mMutex;
     std::optional<std::vector<std::filesystem::path>> mResult;

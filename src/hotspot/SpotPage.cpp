@@ -14,6 +14,7 @@
 #include "Log.h"
 #include "ui/Theme.h"
 #include "ui/Widgets.h"
+#include "util/FileUtil.h"
 
 namespace hpvr::hotspot {
 
@@ -190,7 +191,7 @@ void SpotPage::ui_header()
     ImGui::BeginGroup();
     ui::ui_text_ellipsis(mAircraft ? mAircraft->displayName : std::string("No aircraft"), textW);
     if (mAircraft)
-        ui::ui_text_ellipsis(mAircraft->vrconfigFile.filename().string(), textW, &theme::kTextDisabled);
+        ui::ui_text_ellipsis(util::Utf8(mAircraft->vrconfigFile.filename()), textW, &theme::kTextDisabled);
     ImGui::EndGroup();
     if (notes > 0) {
         ImGui::SameLine(ImGui::GetContentRegionMax().x - explainW - notesW);
@@ -214,7 +215,7 @@ void SpotPage::ui_not_available()
     } else {
         ui::ui_wrapped_text("This aircraft has no vrconfig file.");
         ImGui::PushStyleColor(ImGuiCol_Text, theme::kTextDisabled);
-        ui::ui_wrapped_text(mAircraft->vrconfigFile.string());
+        ui::ui_wrapped_text(util::Utf8(mAircraft->vrconfigFile));
         ImGui::PopStyleColor();
         ImGui::Spacing();
         if (ui::ui_button(ICON_FA_PLUS "  Create the file and add a hotspot", ImVec2(0, 44.0f))) {

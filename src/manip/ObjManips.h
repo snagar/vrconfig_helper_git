@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
-#include <stop_token>
+#include "util/StopThread.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -119,11 +119,11 @@ struct ObjScanResult {
 
 // Reads the ATTR_manip_ lines of `files`, merging click areas of the same control.
 ObjScanResult ScanObjFiles(const std::vector<std::filesystem::path>& files, const ManipTypeSet& types,
-                           std::stop_token stop = {}, ScanProgress* progress = nullptr);
+                           util::StopToken stop = {}, ScanProgress* progress = nullptr);
 
 // Reads the .acf object list, then every listed OBJ file (missing ones are kept, empty).
 AircraftScan ScanAircraft(const std::filesystem::path& acfFile, const ManipTypeSet& types,
-                          std::stop_token stop = {}, ScanProgress* progress = nullptr);
+                          util::StopToken stop = {}, ScanProgress* progress = nullptr);
 
 // The manipulators of the chosen files together (same control in two files = one entry).
 ObjScanResult CombineScans(const std::vector<const ObjFileScan*>& files, const ManipTypeSet& types);

@@ -124,7 +124,7 @@ const char* KindKeyword(SpotKind kind)
 
 fs::path VrConfigPathFor(const fs::path& acfFile)
 {
-    const std::string wanted = acfFile.stem().string() + "_vrconfig.txt";
+    const std::string wanted = util::Utf8(acfFile.stem()) + "_vrconfig.txt";
     const fs::path exact = acfFile.parent_path() / wanted;
     std::error_code ec;
     if (fs::exists(exact, ec))
@@ -136,7 +136,7 @@ fs::path VrConfigPathFor(const fs::path& acfFile)
     };
     const std::string wantedLower = lmbda_lower(wanted);
     for (const auto& entry : fs::directory_iterator(acfFile.parent_path(), ec)) {
-        if (entry.is_regular_file(ec) && lmbda_lower(entry.path().filename().string()) == wantedLower)
+        if (entry.is_regular_file(ec) && lmbda_lower(util::Utf8(entry.path().filename())) == wantedLower)
             return entry.path();
     }
     return exact;
@@ -231,7 +231,7 @@ bool VrConfigFile::Load(const fs::path& path)
 
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        mLastError = std::format("cannot open {}", path.string());
+        mLastError = std::format("cannot open {}", util::Utf8(path));
         LOG_WARN("{}", mLastError);
         return false;
     }
@@ -253,7 +253,7 @@ bool VrConfigFile::Load(const fs::path& path)
     }
 
     ParseLines();
-    LOG_INFO("{}: {} teleport spots, {} lines{}", path.filename().string(), mSpots.size(),
+    LOG_INFO("{}: {} teleport spots, {} lines{}", util::Utf8(path.filename()), mSpots.size(),
              mLines.size(), mReferencePoint ? ", uses REF_POINT_ACF" : "");
     return true;
 }
@@ -583,7 +583,7 @@ void VrConfigFile::CreateNew(const fs::path& path)
     mEndsWithLineEnd = true;
     mLastError.clear();
     ParseLines();
-    LOG_INFO("new vrconfig in memory: {}", path.string());
+    LOG_INFO("new vrconfig in memory: {}", util::Utf8(path));
 }
 
 bool VrConfigFile::UpdateSpot(std::size_t index, const TeleportSpot& spot)
@@ -832,7 +832,7 @@ bool VrConfigFile::Save(const fs::path& target)
         LOG_ERROR("{}", mLastError);
         return false;
     }
-    LOG_INFO("saved {}", dest.string());
+    LOG_INFO("saved {}", util::Utf8(dest));
     return true;
 }
 

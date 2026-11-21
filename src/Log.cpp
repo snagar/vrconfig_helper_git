@@ -9,6 +9,7 @@
 
 #include "loguru.hpp"
 #include "XPLMUtilities.h"
+#include "util/FileUtil.h"
 
 #ifndef VRCH_LOG_TO_XPLANE_DEFAULT
 #define VRCH_LOG_TO_XPLANE_DEFAULT 1
@@ -86,7 +87,11 @@ void RotateFiles(const fs::path& base)
 bool OpenFile()
 {
     State& state = TheState();
-    state.file = std::fopen(state.path.string().c_str(), "w");
+#if defined(_WIN32)
+    state.file = _wfopen(state.path.c_str(), L"w");        // wide path: non-ASCII folders work
+#else
+    state.file = std::fopen(state.path.c_str(), "w");
+#endif
     state.size = 0;
     return state.file != nullptr;
 }
@@ -172,7 +177,7 @@ bool Init(std::string_view pluginName, const fs::path& directory)
         state.path = directory / (state.pluginName + ".log");
         RotateFiles(state.path);
         if (!OpenFile()) {
-            XPlaneLine(Level::Error, std::format("[{}] cannot open log file {}", __func__, state.path.string()));
+            XPlaneLine(Level::Error, std::format("[{}] cannot open log file {}", __func__, util::Utf8(state.path)));
             return false;
         }
     }

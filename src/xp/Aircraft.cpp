@@ -11,6 +11,7 @@
 #include "XPLMUtilities.h"
 
 #include "Log.h"
+#include "util/FileUtil.h"
 
 namespace hpvr::xp {
 
@@ -57,7 +58,7 @@ fs::path GetAircraftFolder()
 {
     char root[2048] = {};
     XPLMGetSystemPath(root);                          // native path, ends with a separator
-    return fs::path(root) / "Aircraft";
+    return util::PathFromUtf8(root) / "Aircraft";
 }
 
 std::optional<UserAircraft> GetUserAircraft()
@@ -71,13 +72,13 @@ std::optional<UserAircraft> GetUserAircraft()
     }
 
     UserAircraft aircraft;
-    aircraft.acfFile      = fs::path(path);
+    aircraft.acfFile      = util::PathFromUtf8(path);
     aircraft.vrconfigFile = vrconfig::VrConfigPathFor(aircraft.acfFile);
 
     char ui[251] = {};
     if (Refs().uiName)
         XPLMGetDatab(Refs().uiName, ui, 0, 250);
-    aircraft.displayName = ui[0] ? std::string(ui) : aircraft.acfFile.stem().string();
+    aircraft.displayName = ui[0] ? std::string(ui) : util::Utf8(aircraft.acfFile.stem());
     return aircraft;
 }
 

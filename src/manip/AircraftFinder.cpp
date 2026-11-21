@@ -1,6 +1,7 @@
 // hpvr - the aircraft (.acf files) the Updater page can pick
 
 #include "AircraftFinder.h"
+#include "util/FileUtil.h"
 
 #include <algorithm>
 #include <cctype>
@@ -24,12 +25,12 @@ std::string Lower(std::string text)
 
 bool IsAcf(const fs::path& path)
 {
-    return Lower(path.extension().string()) == ".acf";
+    return Lower(util::Utf8(path.extension())) == ".acf";
 }
 
 bool SkippedFolder(const fs::path& path)
 {
-    const std::string name = Lower(path.filename().string());
+    const std::string name = Lower(util::Utf8(path.filename()));
     return name == "liveries" || name == "plugins" || name == "objects" || name == "sounds" ||
            name == "cockpit" || name == "cockpit_3d" || name == "airfoils" || name == "weapons" ||
            (!name.empty() && name.front() == '.');
@@ -46,12 +47,12 @@ std::vector<fs::path> ListAcfInFolder(const fs::path& folder)
             files.push_back(entry.path());
     }
     std::sort(files.begin(), files.end(), [](const fs::path& first, const fs::path& second) {
-        return Lower(first.filename().string()) < Lower(second.filename().string());
+        return Lower(util::Utf8(first.filename())) < Lower(util::Utf8(second.filename()));
     });
     return files;
 }
 
-std::vector<fs::path> FindAllAcf(const fs::path& root, std::stop_token stop, std::atomic<std::size_t>* foldersSeen)
+std::vector<fs::path> FindAllAcf(const fs::path& root, util::StopToken stop, std::atomic<std::size_t>* foldersSeen)
 {
     std::vector<fs::path> files;
     std::error_code ec;
@@ -102,7 +103,7 @@ void AircraftFinder::Start(const fs::path& root)
         mRunning = true;
     }
     mFoldersSeen = 0;
-    mThread = std::jthread([this, root](std::stop_token stop) {
+    mThread = util::StopThread([this, root](util::StopToken stop) {
         std::vector<fs::path> files = FindAllAcf(root, stop, &mFoldersSeen);
         std::lock_guard lock(mMutex);
         if (!stop.stop_requested())

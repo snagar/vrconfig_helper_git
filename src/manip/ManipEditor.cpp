@@ -39,7 +39,7 @@ void ManipEditor::ResetRunState()
 OpenResult ManipEditor::Open(const fs::path& vrconfigPath)
 {
     if (mOpen && mFile.FilePath() == vrconfigPath && ChangeCount() > 0) {
-        LOG_INFO("keeping {} unsaved manipulator changes of {}", ChangeCount(), vrconfigPath.filename().string());
+        LOG_INFO("keeping {} unsaved manipulator changes of {}", ChangeCount(), util::Utf8(vrconfigPath.filename()));
         return OpenResult::KeptChanges;
     }
 
@@ -60,7 +60,7 @@ OpenResult ManipEditor::Open(const fs::path& vrconfigPath)
         mFileOnDisk = false;
         mOpen = true;
         ReadKeys();
-        LOG_INFO("no vrconfig file yet: {} (created on Save)", vrconfigPath.string());
+        LOG_INFO("no vrconfig file yet: {} (created on Save)", util::Utf8(vrconfigPath));
         return OpenResult::NewFile;
     }
     if (!mFile.Load(vrconfigPath)) {
@@ -78,7 +78,7 @@ void ManipEditor::Discard()
 {
     if (mOpen && ChangeCount() > 0)
         LOG_INFO("{} unsaved manipulator changes of {} discarded", ChangeCount(),
-                 mFile.FilePath().filename().string());
+                 util::Utf8(mFile.FilePath().filename()));
     mFile = vrconfig::VrConfigFile{};
     mLoadedText.clear();
     mFileKeys.clear();
@@ -227,7 +227,7 @@ std::vector<std::string> ManipEditor::BlockLines(const ObjManip& manip, bool wit
     std::vector<std::string> lines;
     if (withComment) {
         lines.push_back(std::format("# {} - {}, extracted by VRConfig Helper", manip.DisplayName(),
-                                    manip.objFile.filename().string()));
+                                    util::Utf8(manip.objFile.filename())));
     }
     lines.push_back("BEGIN_MANIP " + manip.Key());
     for (const std::string& line : manip.body)
@@ -254,7 +254,7 @@ SaveResult ManipEditor::Save(bool overwriteOutsideChanges)
 
     if (!overwriteOutsideChanges && ChangedOnDisk()) {
         mLastError = "the file was changed outside VRConfig Helper since it was read";
-        LOG_WARN("{}: {}", mFile.FilePath().string(), mLastError);
+        LOG_WARN("{}: {}", util::Utf8(mFile.FilePath()), mLastError);
         return SaveResult::ChangedOnDisk;
     }
     if (overwriteOutsideChanges && mFileOnDisk && !mFile.Load(mFile.FilePath())) {
@@ -263,14 +263,14 @@ SaveResult ManipEditor::Save(bool overwriteOutsideChanges)
     }
 
     // Backup once per X-Plane run: the file exactly as it is on disk now.
-    const std::string backupKey = BackupPath().string();
+    const std::string backupKey = util::Utf8(BackupPath());
     if (mFileOnDisk && !BackedUpThisRun().contains(backupKey)) {
         if (!CopyFileSafely(mFile.FilePath(), BackupPath(), mLastError)) {
             LOG_ERROR("backup failed, nothing saved: {}", mLastError);
             return SaveResult::Failed;
         }
         BackedUpThisRun().insert(backupKey);
-        LOG_INFO("backup written: {}", BackupPath().string());
+        LOG_INFO("backup written: {}", util::Utf8(BackupPath()));
     }
 
     // New blocks go to the end of the file sorted by group (first reference's path),
@@ -360,7 +360,7 @@ bool ManipEditor::HasBackup() const
 
 bool ManipEditor::BackupMadeThisRun() const
 {
-    return mOpen && BackedUpThisRun().contains(BackupPath().string());
+    return mOpen && BackedUpThisRun().contains(util::Utf8(BackupPath()));
 }
 
 std::optional<ManipEditor::Clock::time_point> ManipEditor::BackupTime() const
@@ -385,7 +385,7 @@ bool ManipEditor::RestoreBackup()
         LOG_ERROR("restore failed: {}", mLastError);
         return false;
     }
-    LOG_INFO("restored {} from its manipulator backup", file.string());
+    LOG_INFO("restored {} from its manipulator backup", util::Utf8(file));
     if (ChangeCount() > 0)
         LOG_INFO("{} unsaved manipulator changes dropped by the restore", ChangeCount());
     std::vector<RowEntry> rows = mRows;

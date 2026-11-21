@@ -120,7 +120,11 @@ std::string ClockTime(SpotEditor::Clock::time_point when)
 #if defined(_WIN32)
     localtime_s(&local, &asTimeT);
 #else
+#if defined(_WIN32)
+    localtime_s(&local, &asTimeT);                     // Windows: same call, other name and order
+#else
     localtime_r(&asTimeT, &local);
+#endif
 #endif
     return std::format("{:02}:{:02}", local.tm_hour, local.tm_min);
 }
@@ -135,14 +139,14 @@ void SpotEditor::ResetRunState()
 OpenResult SpotEditor::Open(const fs::path& vrconfigPath)
 {
     if (mOpen && mFile.FilePath() == vrconfigPath && ChangeCount() > 0) {
-        LOG_INFO("keeping {} unsaved changes of {}", ChangeCount(), vrconfigPath.filename().string());
+        LOG_INFO("keeping {} unsaved changes of {}", ChangeCount(), util::Utf8(vrconfigPath.filename()));
         return OpenResult::KeptChanges;
     }
 
     Discard();
     std::error_code ec;
     if (vrconfigPath.empty() || !fs::exists(vrconfigPath, ec)) {
-        mLastError = std::format("no vrconfig file: {}", vrconfigPath.string());
+        mLastError = std::format("no vrconfig file: {}", util::Utf8(vrconfigPath));
         LOG_INFO("{}", mLastError);
         return OpenResult::NoFile;
     }
@@ -173,7 +177,7 @@ void SpotEditor::Discard()
 {
     if (mOpen && ChangeCount() > 0)
         LOG_INFO("{} unsaved changes in {} spots of {} discarded", ChangeCount(),
-                 ChangedSpotCount(), mFile.FilePath().filename().string());
+                 ChangedSpotCount(), util::Utf8(mFile.FilePath().filename()));
     mFile = vrconfig::VrConfigFile{};
     mSlots.clear();
     mLoadedText.clear();
@@ -518,19 +522,19 @@ SaveResult SpotEditor::Save(bool overwriteOutsideChanges)
 
     if (!overwriteOutsideChanges && ChangedOnDisk()) {
         mLastError = "the file was changed outside VRConfig Helper since it was read";
-        LOG_WARN("{}: {}", mFile.FilePath().string(), mLastError);
+        LOG_WARN("{}: {}", util::Utf8(mFile.FilePath()), mLastError);
         return SaveResult::ChangedOnDisk;
     }
 
     // Backup once per X-Plane run: the file exactly as it is on disk now.
-    const std::string key = mFile.FilePath().string();
+    const std::string key = util::Utf8(mFile.FilePath());
     if (mFileOnDisk && !BackedUpThisRun().contains(key)) {
         if (!CopyFileSafely(mFile.FilePath(), BackupPath(), mLastError)) {
             LOG_ERROR("backup failed, nothing saved: {}", mLastError);
             return SaveResult::Failed;
         }
         BackedUpThisRun().insert(key);
-        LOG_INFO("backup written: {}", BackupPath().string());
+        LOG_INFO("backup written: {}", util::Utf8(BackupPath()));
     }
 
     const std::vector<SpotChanges> changes = Changes();
@@ -614,7 +618,7 @@ bool SpotEditor::HasBackup() const
 
 bool SpotEditor::BackupMadeThisRun() const
 {
-    return mOpen && BackedUpThisRun().contains(mFile.FilePath().string());
+    return mOpen && BackedUpThisRun().contains(util::Utf8(mFile.FilePath()));
 }
 
 std::optional<SpotEditor::Clock::time_point> SpotEditor::BackupTime() const
@@ -639,7 +643,7 @@ bool SpotEditor::RestoreBackup()
         LOG_ERROR("restore failed: {}", mLastError);
         return false;
     }
-    LOG_INFO("restored {} from its backup", file.string());
+    LOG_INFO("restored {} from its backup", util::Utf8(file));
     if (ChangeCount() > 0)
         LOG_INFO("{} unsaved changes dropped by the restore", ChangeCount());
     mOpen = false;                                     // Open() must re-read, not keep changes

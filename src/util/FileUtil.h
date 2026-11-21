@@ -4,8 +4,24 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 namespace hpvr::util {
+
+// Paths and UTF-8 text. X-Plane hands out UTF-8 paths, and ImGui and the log
+// show UTF-8. On Windows, std::filesystem::path(std::string) and .string() use
+// the local code page instead, so non-ASCII folder names would break: always
+// go through these two. On Linux and macOS they change nothing.
+inline std::string Utf8(const std::filesystem::path& path)
+{
+    const std::u8string text = path.u8string();
+    return std::string(text.begin(), text.end());
+}
+
+inline std::filesystem::path PathFromUtf8(std::string_view text)
+{
+    return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
 
 // The whole file as bytes; empty when it cannot be read.
 std::string ReadAll(const std::filesystem::path& path);

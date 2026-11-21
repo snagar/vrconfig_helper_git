@@ -13,6 +13,7 @@
 #include "Log.h"
 #include "ui/Theme.h"
 #include "ui/Widgets.h"
+#include "util/FileUtil.h"
 
 namespace hotspot_vr::hotspot {
 
@@ -138,7 +139,7 @@ void SpotEditWindow::DrawHeader()
 
     if (mAircraft) {
         ImGui::PushStyleColor(ImGuiCol_Text, theme::kTextDisabled);
-        ImGui::TextUnformatted(mAircraft->vrconfigFile.filename().string().c_str());
+        ImGui::TextUnformatted(util::Utf8(mAircraft->vrconfigFile.filename()).c_str());
         ImGui::PopStyleColor();
     }
 }
@@ -150,7 +151,7 @@ void SpotEditWindow::DrawNotAvailable()
         WrappedText("X-Plane did not report a user aircraft.", &theme::kErrorText);
     } else if (mOpenResult == OpenResult::NoFile) {
         WrappedText(std::format("This aircraft has no vrconfig file.\nExpected: {}",
-                                mAircraft->vrconfigFile.string()));
+                                util::Utf8(mAircraft->vrconfigFile)));
         ImGui::SameLine();
         ui::HelpMarker("X-Plane reads teleport hotspots from <aircraft>_vrconfig.txt, "
                        "in the same folder as the .acf file.");
