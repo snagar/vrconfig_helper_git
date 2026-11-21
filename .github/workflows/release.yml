@@ -10,9 +10,10 @@
 #   - by hand: Actions tab > "release - multi platform" > Run workflow. Debug build
 #     only; the zip is kept as a workflow artifact, nothing is published.
 #
-# The X-Plane SDK comes from the repository: libs/xpsdk/ or libs/XPSDK.zip.
-# CMake unpacks the zip by itself (any folder name inside it), so no step here
-# deals with the SDK.
+# The X-Plane SDK: each build job unpacks libs/XPSDK.zip into libs/xpsdk/ (step
+# "Extract XPSDK") before CMake runs; CMake only expects libs/xpsdk/ to be there.
+# Laminar's zip has had different top folder names (SDK, sdk, xpsdk-master); the
+# step renames whichever it finds to xpsdk.
 #
 # The result of a tagged build, attached to the release:
 #   vrconfig_helper-<tag>.zip          the plugin folder, ready to copy into
@@ -98,9 +99,24 @@ jobs:
           apt-get install -y --no-install-recommends software-properties-common gpg-agent ca-certificates git
           add-apt-repository -y ppa:ubuntu-toolchain-r/test
           apt-get update
-          apt-get install -y --no-install-recommends gcc-13 g++-13 make cmake libgl-dev file
+          apt-get install -y --no-install-recommends gcc-13 g++-13 make cmake libgl-dev file unzip
 
       - uses: actions/checkout@v6
+
+      - name: Extract XPSDK
+        shell: bash
+        run: |
+          cd libs
+          rm -rf xpsdk SDK sdk xpsdk-master
+          unzip -q -o XPSDK.zip
+          if [ ! -d xpsdk ]; then
+            if   [ -d SDK ];          then mv SDK xpsdk
+            elif [ -d sdk ];          then mv sdk xpsdk
+            elif [ -d xpsdk-master ]; then mv xpsdk-master xpsdk
+            fi
+          fi
+          ls -l xpsdk
+          test -f xpsdk/CHeaders/XPLM/XPLMDefs.h || { echo "::error::libs/XPSDK.zip: no CHeaders/XPLM/XPLMDefs.h under a known folder name"; exit 1; }
 
       - name: Configure
         run: >
@@ -132,7 +148,7 @@ jobs:
   # --- Windows -----------------------------------------------------------------------
   # Visual Studio 2022 (MSVC), 64-bit; the C++ runtime is linked into the plugin (/MT).
   build-win:
-    # if: ( 1 == 2 )
+    if: ( 1 == 2 )
     needs: [pre-build]
     runs-on: windows-2022
     strategy:
@@ -142,6 +158,21 @@ jobs:
         build_type: [Debug]
     steps:
       - uses: actions/checkout@v6
+
+      - name: Extract XPSDK
+        shell: pwsh
+        run: |
+          cd libs
+          Remove-Item -Recurse -Force xpsdk, SDK, sdk, xpsdk-master -ErrorAction SilentlyContinue
+          Expand-Archive XPSDK.zip -DestinationPath . -Force
+          if (-not (Test-Path xpsdk -PathType Container)) {
+              if     (Test-Path SDK -PathType Container)          { Rename-Item SDK xpsdk }
+              elseif (Test-Path xpsdk-master -PathType Container) { Rename-Item xpsdk-master xpsdk }
+          }
+          Get-ChildItem xpsdk
+          if (-not (Test-Path xpsdk/Libraries/Win/XPLM_64.lib)) {
+              Write-Host "::error::libs/XPSDK.zip: no Libraries/Win/XPLM_64.lib under a known folder name"; exit 1
+          }
 
       - name: Configure
         run: >
@@ -169,6 +200,7 @@ jobs:
   # One plugin file for Apple Silicon and Intel (Universal 2), macOS 13.3 or newer.
   # Signed ad hoc (no Apple Developer account); see the install notes in README.md.
   build-mac:
+    if: ( 1 == 2 )
     needs: [pre-build]
     runs-on: macos-15
     strategy:
@@ -178,6 +210,21 @@ jobs:
         build_type: [Debug]
     steps:
       - uses: actions/checkout@v6
+
+      - name: Extract XPSDK
+        shell: bash
+        run: |
+          cd libs
+          rm -rf xpsdk SDK sdk xpsdk-master
+          ditto -x -k XPSDK.zip .              # ditto keeps the framework symlinks
+          if [ ! -d xpsdk ]; then
+            if   [ -d SDK ];          then mv SDK xpsdk
+            elif [ -d sdk ];          then mv sdk xpsdk
+            elif [ -d xpsdk-master ]; then mv xpsdk-master xpsdk
+            fi
+          fi
+          ls -l xpsdk xpsdk/Libraries/Mac/XPLM.framework
+          test -d xpsdk/Libraries/Mac/XPLM.framework || { echo "::error::libs/XPSDK.zip: no Libraries/Mac/XPLM.framework under a known folder name"; exit 1; }
 
       - name: Configure
         run: >
@@ -222,14 +269,12 @@ jobs:
       - name: Assemble the plugin folders and zip them
         id: zip
         shell: bash
-        env:
-          BUILD_TYPES: ${{ needs.pre-build.outputs.build_types }}
         run: |
           set -e
           label="${GITHUB_REF_NAME//\//-}"
           files=""
           for type in Release Debug; do
-            [[ "$BUILD_TYPES" == *"\"$type\""* ]] || continue       # only the types built
+            [[ -d "download/plugin-lin-${type}" ]] || continue        # only the types built
             out="dist/${type}/${PLUGIN_NAME}"
             mkdir -p "$out"
             for os in lin win mac; do

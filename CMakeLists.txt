@@ -9,8 +9,8 @@
 #     libs/ImgWindow/      ImgWindow (kept whole: ImgWindow.*, ImgFontAtlas.*, SystemGL.h, contrib/)
 #     libs/loguru/         loguru logging library (loguru.hpp / loguru.cpp)
 #     libs/fonts/          IconsFontAwesome5.h + fa-solid-900.inc
-#     libs/XPSDK.zip       the X-Plane SDK as a zip; unpacked into the build folder
-#                          when libs/xpsdk/ is not there (see "X-Plane SDK" below)
+#     libs/xpsdk/          the X-Plane SDK, unpacked (CHeaders/, Libraries/); in CI
+#                          the workflow unpacks it from libs/XPSDK.zip
 #
 #  Build (Linux, Windows, macOS - the same two commands):
 #     cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -97,57 +97,13 @@ set(LOGURU_DIR     "${VRCH_LIBS_DIR}/loguru"             CACHE PATH "loguru root
 set(FONTS_DIR      "${VRCH_LIBS_DIR}/fonts"              CACHE PATH "Embedded fonts")
 
 # --- X-Plane SDK ---------------------------------------------------------------------
-# Used, first found wins:
-#   1. -DXPSDK_DIR=<folder>          a folder you name
-#   2. libs/xpsdk/                    an unpacked SDK in the source tree - only when it
-#                                     holds this system's XPLM library (Windows:
-#                                     Libraries/Win/XPLM_64.lib, macOS:
-#                                     Libraries/Mac/XPLM.framework); else the zip
-#   3. libs/XPSDK.zip                 unpacked into <build>/xpsdk_unpacked/; the folder
-#                                     name inside the zip does not matter (SDK, xpsdk,
-#                                     xpsdk-master, ...): the folder holding
-#                                     CHeaders/XPLM/XPLMDefs.h is used.
-set(XPSDK_DIR "" CACHE PATH "X-Plane SDK folder (empty = libs/xpsdk or libs/XPSDK.zip)")
-set(VRCH_XPSDK_ZIP "${VRCH_LIBS_DIR}/XPSDK.zip" CACHE FILEPATH "X-Plane SDK as a zip")
-if(XPSDK_DIR AND NOT EXISTS "${XPSDK_DIR}/CHeaders/XPLM/XPLMDefs.h")
-    message(FATAL_ERROR "XPSDK_DIR=${XPSDK_DIR} has no CHeaders/XPLM/XPLMDefs.h")
-endif()
-# The file of this system's XPLM library, inside an SDK folder (Linux needs none).
-if(WIN32)
-    set(_vrch_xplm_needs "Libraries/Win/XPLM_64.lib")
-elseif(APPLE)
-    set(_vrch_xplm_needs "Libraries/Mac/XPLM.framework")
-else()
-    set(_vrch_xplm_needs "CHeaders/XPLM/XPLMDefs.h")
-endif()
-if(NOT XPSDK_DIR)
-    if(EXISTS "${VRCH_LIBS_DIR}/xpsdk/CHeaders/XPLM/XPLMDefs.h"
-       AND EXISTS "${VRCH_LIBS_DIR}/xpsdk/${_vrch_xplm_needs}")
-        set(_vrch_xpsdk "${VRCH_LIBS_DIR}/xpsdk")
-    elseif(EXISTS "${VRCH_XPSDK_ZIP}")
-        if(EXISTS "${VRCH_LIBS_DIR}/xpsdk")
-            message(STATUS "${PROJECT_NAME}: libs/xpsdk has no ${_vrch_xplm_needs} - using ${VRCH_XPSDK_ZIP}")
-        endif()
-        set(_vrch_unpacked "${CMAKE_BINARY_DIR}/xpsdk_unpacked")
-        file(GLOB_RECURSE _vrch_defs "${_vrch_unpacked}/*/XPLMDefs.h")
-        if(NOT _vrch_defs OR "${VRCH_XPSDK_ZIP}" IS_NEWER_THAN "${_vrch_unpacked}/.stamp")
-            message(STATUS "${PROJECT_NAME}: unpacking ${VRCH_XPSDK_ZIP}")
-            file(REMOVE_RECURSE "${_vrch_unpacked}")
-            file(ARCHIVE_EXTRACT INPUT "${VRCH_XPSDK_ZIP}" DESTINATION "${_vrch_unpacked}")
-            file(TOUCH "${_vrch_unpacked}/.stamp")
-            file(GLOB_RECURSE _vrch_defs "${_vrch_unpacked}/*/XPLMDefs.h")
-        endif()
-        list(FILTER _vrch_defs INCLUDE REGEX "/CHeaders/XPLM/XPLMDefs\\.h$")
-        if(NOT _vrch_defs)
-            message(FATAL_ERROR "${VRCH_XPSDK_ZIP} has no CHeaders/XPLM/XPLMDefs.h")
-        endif()
-        list(GET _vrch_defs 0 _vrch_defs)
-        get_filename_component(_vrch_xpsdk "${_vrch_defs}/../../.." ABSOLUTE)
-    else()
-        message(FATAL_ERROR "No X-Plane SDK: put it in libs/xpsdk/, or as libs/XPSDK.zip, "
-                            "or pass -DXPSDK_DIR=<folder>.")
-    endif()
-    set(XPSDK_DIR "${_vrch_xpsdk}" CACHE PATH "X-Plane SDK folder (empty = libs/xpsdk or libs/XPSDK.zip)" FORCE)
+# Expected unpacked in libs/xpsdk/ (CHeaders/, Libraries/), or in a folder passed as
+# -DXPSDK_DIR=<folder>. Getting it there is not CMake's job: the GitHub workflow
+# unpacks libs/XPSDK.zip into libs/xpsdk/ before it configures.
+set(XPSDK_DIR "${VRCH_LIBS_DIR}/xpsdk" CACHE PATH "X-Plane SDK folder (holds CHeaders/ and Libraries/)")
+if(NOT EXISTS "${XPSDK_DIR}/CHeaders/XPLM/XPLMDefs.h")
+    message(FATAL_ERROR "No X-Plane SDK in ${XPSDK_DIR} (CHeaders/XPLM/XPLMDefs.h is missing). "
+                        "Unpack it there, or pass -DXPSDK_DIR=<folder>.")
 endif()
 message(STATUS "${PROJECT_NAME}: X-Plane SDK ${XPSDK_DIR}")
 
