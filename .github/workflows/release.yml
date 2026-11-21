@@ -1,0 +1,261 @@
+# VRConfig Helper - build for Linux, Windows and macOS, and publish releases.
+#
+# When it runs:
+#   - every push to a branch, and every pull request: build all three systems
+#     (Release + Debug) and keep the result as workflow artifacts. Nothing is published.
+#   - a pushed tag: the same, plus a GitHub Release with the plugin zip:
+#       v1.0.0, 1.0.0-release ........ release
+#       b1.0.0, 1.0.0-beta2 .......... pre-release (beta)
+#       t1.0.0, 1.0.0-test3 .......... pre-release (test build)
+#       any other tag ................ build only, nothing published
+#   - by hand: Actions tab > "release - multi platform" > Run workflow (build only).
+#
+# The X-Plane SDK comes from the repository: libs/xpsdk/ or libs/XPSDK.zip.
+# CMake unpacks the zip by itself (any folder name inside it), so no step here
+# deals with the SDK.
+#
+# The result of a tagged build, attached to the release:
+#   vrconfig_helper-<tag>.zip          the plugin folder, ready to copy into
+#                                      X-Plane/Resources/plugins/
+#   vrconfig_helper-<tag>-debug.zip    the Debug builds of the three plugin files
+#                                      (for troubleshooting only)
+name: release - multi platform
+
+on:
+  push:
+    branches: ['**']
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PLUGIN_NAME: vrconfig_helper
+
+jobs:
+  # --- What kind of build is this? ---------------------------------------------------
+  pre-build:
+    runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.kind.outputs.kind }}               # release | beta | test | build
+      prerelease: ${{ steps.kind.outputs.prerelease }}   # true | false
+      version: ${{ steps.kind.outputs.version }}         # the project's VERSION in CMakeLists.txt
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the build kind from the tag
+        id: kind
+        shell: bash
+        run: |
+          kind="build"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+            if   [[ "$tag" == *-test* || "$tag" == t* ]];    then kind="test"
+            elif [[ "$tag" == *-beta* || "$tag" == b* ]];    then kind="beta"
+            elif [[ "$tag" == v* || "$tag" == *-release* ]]; then kind="release"
+            fi
+          fi
+          prerelease="false"
+          [[ "$kind" == "beta" || "$kind" == "test" ]] && prerelease="true"
+          version=$(sed -n '/^project(vrconfig_helper/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### Build kind: \`$kind\` (ref ${GITHUB_REF_NAME}, project version ${version})" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$kind" == "release" && "${GITHUB_REF_NAME#v}" != "$version"* ]]; then
+            echo "::warning::Tag ${GITHUB_REF_NAME} does not match the project VERSION ${version} in CMakeLists.txt"
+          fi
+
+  # --- Linux -------------------------------------------------------------------------
+  # Built inside Ubuntu 22.04, so the plugin also loads on older distributions (it
+  # needs glibc 2.35 or newer). GCC 13 comes from the Ubuntu toolchain PPA: 22.04's
+  # own GCC 11 has no std::format. The C++ runtime is linked statically.
+  build-lin:
+    needs: [pre-build]
+    runs-on: ubuntu-24.04
+    container: ubuntu:22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - name: Install the build tools
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends software-properties-common gpg-agent ca-certificates git
+          add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          apt-get update
+          apt-get install -y --no-install-recommends gcc-13 g++-13 make cmake libgl-dev file
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_C_COMPILER=gcc-13 -DCMAKE_CXX_COMPILER=g++-13
+          -DVRCH_DEPLOY=OFF
+
+      - name: Build
+        run: cmake --build build -j "$(nproc)"
+
+      - name: Check the plugin file
+        shell: bash
+        run: |
+          xpl="build/${PLUGIN_NAME}/lin_x64/${PLUGIN_NAME}.xpl"
+          file "$xpl"
+          echo "Needed libraries:"; objdump -p "$xpl" | grep NEEDED
+          echo "Exported functions:"; objdump -T "$xpl" | grep -E " Xplugin|XPlugin" || true
+          if objdump -p "$xpl" | grep -q "libstdc++"; then
+            echo "::error::The Linux plugin must not need libstdc++.so (it is linked statically)"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-lin-${{ matrix.build_type }}
+          path: build/${{ env.PLUGIN_NAME }}/
+          if-no-files-found: error
+
+  # --- Windows -----------------------------------------------------------------------
+  # Visual Studio 2022 (MSVC), 64-bit; the C++ runtime is linked into the plugin (/MT).
+  build-win:
+    needs: [pre-build]
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DVRCH_DEPLOY=OFF
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Check the plugin file
+        shell: bash
+        run: ls -l "build/${PLUGIN_NAME}/win_x64/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-win-${{ matrix.build_type }}
+          path: |
+            build/${{ env.PLUGIN_NAME }}/
+            !build/${{ env.PLUGIN_NAME }}/win_x64/*.exp
+            !build/${{ env.PLUGIN_NAME }}/win_x64/*.lib
+            !build/${{ env.PLUGIN_NAME }}/win_x64/*.ilk
+          if-no-files-found: error
+
+  # --- macOS -------------------------------------------------------------------------
+  # One plugin file for Apple Silicon and Intel (Universal 2), macOS 13.3 or newer.
+  # Signed ad hoc (no Apple Developer account); see the install notes in README.md.
+  build-mac:
+    needs: [pre-build]
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DVRCH_DEPLOY=OFF
+
+      - name: Build
+        run: cmake --build build -j "$(sysctl -n hw.logicalcpu)"
+
+      - name: Check and sign the plugin file
+        shell: bash
+        run: |
+          xpl="build/${PLUGIN_NAME}/mac_x64/${PLUGIN_NAME}.xpl"
+          info=$(lipo -info "$xpl"); echo "$info"
+          if [[ "$info" != *x86_64* || "$info" != *arm64* ]]; then
+            echo "::error::Expected x86_64 and arm64 in one file, got: $info"; exit 1
+          fi
+          otool -L "$xpl"
+          codesign --force --sign - "$xpl"
+          codesign --verify --verbose "$xpl"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-mac-${{ matrix.build_type }}
+          path: build/${{ env.PLUGIN_NAME }}/
+          if-no-files-found: error
+
+  # --- One plugin folder for all three systems -----------------------------------------
+  package:
+    needs: [pre-build, build-lin, build-win, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write                     # to create the GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: download
+
+      - name: Assemble the plugin folders
+        shell: bash
+        run: |
+          set -e
+          for type in Release Debug; do
+            out="dist/${type}/${PLUGIN_NAME}"
+            mkdir -p "$out"
+            for os in lin win mac; do
+              cp -R "download/plugin-${os}-${type}/." "$out/"
+            done
+          done
+          # Release folder: the plugin plus what a user reads first.
+          cp LICENSE "dist/Release/${PLUGIN_NAME}/"
+          cp docs/VRConfig_Helper_User_Guide.txt "dist/Release/${PLUGIN_NAME}/"
+          echo "${GITHUB_REF_NAME} (${GITHUB_SHA::8})" > "dist/Release/${PLUGIN_NAME}/build.txt"
+          find dist -type f | sort
+
+      - name: Zip
+        id: zip
+        shell: bash
+        run: |
+          set -e
+          label="${GITHUB_REF_NAME//\//-}"
+          (cd dist/Release && zip -r -9 "../../${PLUGIN_NAME}-${label}.zip" "${PLUGIN_NAME}")
+          (cd dist/Debug   && zip -r -9 "../../${PLUGIN_NAME}-${label}-debug.zip" "${PLUGIN_NAME}")
+          echo "release_zip=${PLUGIN_NAME}-${label}.zip" >> "$GITHUB_OUTPUT"
+          echo "debug_zip=${PLUGIN_NAME}-${label}-debug.zip" >> "$GITHUB_OUTPUT"
+          ls -l *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PLUGIN_NAME }}-all-platforms
+          path: "*.zip"
+
+      - name: Release notes
+        if: needs.pre-build.outputs.kind != 'build'
+        shell: bash
+        run: |
+          if [[ ! -f notes.md ]]; then
+            echo "VRConfig Helper ${GITHUB_REF_NAME}" > notes.md
+          fi
+
+      - name: Publish the GitHub Release
+        if: needs.pre-build.outputs.kind != 'build'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ needs.pre-build.outputs.kind }}: ${{ github.ref_name }}"
+          body_path: notes.md
+          prerelease: ${{ needs.pre-build.outputs.prerelease == 'true' }}
+          files: |
+            ${{ steps.zip.outputs.release_zip }}
+            ${{ steps.zip.outputs.debug_zip }}
