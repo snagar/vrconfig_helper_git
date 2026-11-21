@@ -89,7 +89,8 @@ jobs:
       fail-fast: false
       matrix:
         #build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
-        build_type: [Debug]
+        #build_type: [Debug]
+        build_type: [Debug, Release]
     steps:
       - name: Install the build tools
         shell: bash
@@ -155,7 +156,8 @@ jobs:
       fail-fast: false
       matrix:
         # build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
-        build_type: [Debug]
+        # build_type: [Debug]
+        build_type: [Debug, Release]
     steps:
       - uses: actions/checkout@v6
 
@@ -206,8 +208,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
-        build_type: [Debug]
+        #build_type: ${{ fromJSON(needs.pre-build.outputs.build_types) }}
+        #build_type: [Debug]
+        build_type: [Debug, Release]
     steps:
       - uses: actions/checkout@v6
 
