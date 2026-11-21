@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -21,6 +22,17 @@ inline std::string Utf8(const std::filesystem::path& path)
 inline std::filesystem::path PathFromUtf8(std::string_view text)
 {
     return std::filesystem::path(std::u8string(text.begin(), text.end()));
+}
+
+// A file's modification time (fs::last_write_time) as a system_clock time, for
+// showing it as a date. std::chrono::clock_cast does this in C++20, but Apple's
+// libc++ (Xcode 16) does not have it; this measures both clocks' "now" instead,
+// which is exact to well under a second.
+inline std::chrono::system_clock::time_point ToSystemTime(std::filesystem::file_time_type fileTime)
+{
+    using namespace std::chrono;
+    return time_point_cast<system_clock::duration>(fileTime - std::filesystem::file_time_type::clock::now()
+                                                   + system_clock::now());
 }
 
 // The whole file as bytes; empty when it cannot be read.

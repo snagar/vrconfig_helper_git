@@ -195,6 +195,20 @@ target_include_directories(imgwindow SYSTEM PUBLIC "${IMGWINDOW_DIR}")
 # legacy OpenGL on older versions - one binary for both.
 target_compile_definitions(imgwindow PUBLIC IMGWINDOW_USE_PANEL_GRAPHICS)
 target_link_libraries(imgwindow PUBLIC imgui xpsdk OpenGL::GL)
+# Windows: the SDK has GL/gl.h but no GL/glext.h, which ImgWindow's SystemGL.h
+# includes. The repository supplies it as libs/GL/glext.h, with the header it needs
+# as libs/GL/KHR/khrplatform.h; ImgWindow itself is not changed. Linux uses the system's
+# glext.h; macOS does not include it.
+if(WIN32)
+    set(VRCH_GLEXT_DIR "${VRCH_LIBS_DIR}" CACHE PATH "Windows: folder that holds GL/glext.h")
+    foreach(_header "GL/glext.h" "GL/KHR/khrplatform.h")
+        if(NOT EXISTS "${VRCH_GLEXT_DIR}/${_header}")
+            message(FATAL_ERROR "Missing ${VRCH_GLEXT_DIR}/${_header} (needed by ImgWindow on Windows)")
+        endif()
+    endforeach()
+    # <GL/glext.h> is found through libs/, <KHR/khrplatform.h> through libs/GL/.
+    target_include_directories(imgwindow SYSTEM PUBLIC "${VRCH_GLEXT_DIR}" "${VRCH_GLEXT_DIR}/GL")
+endif()
 
 # --- loguru (static) -------------------------------------------------------------
 add_library(loguru STATIC "${LOGURU_DIR}/loguru.cpp")

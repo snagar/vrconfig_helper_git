@@ -371,7 +371,7 @@ std::optional<ManipEditor::Clock::time_point> ManipEditor::BackupTime() const
     const auto fileTime = fs::last_write_time(BackupPath(), ec);
     if (ec)
         return std::nullopt;
-    return std::chrono::clock_cast<Clock>(fileTime);
+    return util::ToSystemTime(fileTime);
 }
 
 bool ManipEditor::RestoreBackup()

@@ -305,7 +305,7 @@ std::optional<ManipUpdater::Clock::time_point> ManipUpdater::BackupTime() const
     const auto fileTime = fs::last_write_time(BackupPath(), ec);
     if (ec)
         return std::nullopt;
-    return std::chrono::clock_cast<Clock>(fileTime);
+    return util::ToSystemTime(fileTime);
 }
 
 bool ManipUpdater::RestoreBackup()

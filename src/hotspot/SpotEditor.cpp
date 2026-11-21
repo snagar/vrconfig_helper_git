@@ -629,7 +629,7 @@ std::optional<SpotEditor::Clock::time_point> SpotEditor::BackupTime() const
     const auto ft = fs::last_write_time(BackupPath(), ec);
     if (ec)
         return std::nullopt;
-    return std::chrono::clock_cast<Clock>(ft);
+    return util::ToSystemTime(ft);
 }
 
 bool SpotEditor::RestoreBackup()
