@@ -130,6 +130,13 @@ Step 2: Pick the manipulators to extract.
 2. Pick single controls (optional). The number next to a type is a button:
    it lists that type's controls with a tick each. Untick the ones you don't
    want; the button then shows, for example, "15/17".
+   In a long list, narrow it down first: type part of a name, dataref,
+   command or OBJ file name in Find, or pick a group (the path of the first
+   command or dataref, such as sim/autopilot) in the list next to it. The X
+   button empties Find. All and None then tick or untick only the controls
+   shown, and the count adds how many are shown ("26 of 28 picked - 2
+   shown"). Hidden controls keep their ticks; both filters are empty again
+   the next time the list opens.
 3. Press "Extract to vrconfig". The result list shows each control under its
    type:
    - added - new, will be written;
@@ -166,7 +173,8 @@ Step 2: Read vrconfig. The list of blocks appears at once; the aircraft's OBJ
 files are checked in the background. Narrow the list with:
 
 - the type ticks (each has a (?) that explains the type and its values);
-- Find: part of a name, command or dataref;
+- Find: part of a name, command or dataref; the X button next to it
+  empties it;
 - Group: the path of the first command or dataref, such as sim/autopilot.
 
 The tag next to a block tells you about it:

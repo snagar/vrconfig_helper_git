@@ -10,10 +10,7 @@
 #include "loguru.hpp"
 #include "XPLMUtilities.h"
 #include "util/FileUtil.h"
-
-#ifndef VRCH_LOG_TO_XPLANE_DEFAULT
-#define VRCH_LOG_TO_XPLANE_DEFAULT 1
-#endif
+#include "SharedInfo.h"
 
 namespace hpvr::log {
 
@@ -21,7 +18,6 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr int  kKeptCopies    = 2;                 // <plugin>.log.1 .. .2
 constexpr char kFileSinkId[]  = "vrconfig_helper_file";
 constexpr char kXPlaneSinkId[] = "vrconfig_helper_xplane";
 
@@ -40,7 +36,7 @@ State& TheState()
     return state;
 }
 
-std::atomic<bool> gMirrorToXPlane{VRCH_LOG_TO_XPLANE_DEFAULT != 0};
+std::atomic<bool> gMirrorToXPlane{info::kLogToXPlaneDefault};
 #ifdef NDEBUG
 std::atomic<int>  gLevel{static_cast<int>(Level::Info)};
 #else
@@ -74,8 +70,8 @@ fs::path Numbered(const fs::path& base, int copyNumber)
 void RotateFiles(const fs::path& base)
 {
     std::error_code ec;
-    fs::remove(Numbered(base, kKeptCopies), ec);
-    for (int i = kKeptCopies - 1; i >= 1; --i) {
+    fs::remove(Numbered(base, info::kLogKeptCopies), ec);
+    for (int i = info::kLogKeptCopies - 1; i >= 1; --i) {
         if (fs::exists(Numbered(base, i), ec))
             fs::rename(Numbered(base, i), Numbered(base, i + 1), ec);
     }
@@ -110,7 +106,7 @@ void FileSink(void*, const loguru::Message& message)
     std::fflush(state.file);                       // keep the log complete if X-Plane crashes
     state.size += line.size();
 
-    if (state.size >= kMaxLogFileSize) {
+    if (state.size >= info::kLogMaxFileSize) {
         std::fclose(state.file);
         state.file = nullptr;
         RotateFiles(state.path);

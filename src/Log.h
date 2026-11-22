@@ -3,7 +3,7 @@
 // Thin layer over loguru:
 //   * every message goes to "<plugin folder>/<plugin>.log"
 //     (rotated: <plugin>.log -> .log.1 -> .log.2, at start-up and when the
-//     file grows past kMaxLogFileSize; at most 2 old copies are kept)
+//     file grows past info::kLogMaxFileSize; at most 2 old copies are kept)
 //   * optionally mirrored to X-Plane's Log.txt (see SetMirrorToXPlane)
 //   * messages are formatted with C++20 std::format
 //
@@ -34,7 +34,6 @@ enum class Level : int {
 };
 
 // Largest size of the active log file before it is rotated.
-inline constexpr std::uintmax_t kMaxLogFileSize = 5u * 1024u * 1024u;
 
 // Start logging into <directory>/<pluginName>.log. Safe to call more than once.
 bool Init(std::string_view pluginName, const std::filesystem::path& directory);
@@ -42,7 +41,7 @@ bool Init(std::string_view pluginName, const std::filesystem::path& directory);
 void Shutdown();
 
 // Also write every message to X-Plane's Log.txt.
-// Default comes from the CMake option VRCH_LOG_TO_XPLANE (ON).
+// Default: info::kLogToXPlaneDefault (SharedInfo.h).
 void SetMirrorToXPlane(bool enabled);
 bool GetMirrorToXPlane();
 

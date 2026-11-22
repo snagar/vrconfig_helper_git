@@ -12,12 +12,9 @@
 #include "Log.h"
 #include "ui/Theme.h"
 #include "ui/Widgets.h"
+#include "SharedInfo.h"
 
 namespace hpvr {
-
-#ifndef VRCONFIG_HELPER_VERSION
-#define VRCONFIG_HELPER_VERSION "0.0.0"
-#endif
 
 namespace {
 
@@ -91,7 +88,7 @@ static const char* PageName(Page page)
 
 PluginWindow::PluginWindow(hotspot::SpotEditor& spotEditor, manip::ManipEditor& manipEditor,
                            manip::ManipUpdater& updater, const std::filesystem::path& pluginFolder)
-    : ImgWindow(WindowGeometry::Centered(kWidth, kHeight, xplm_WindowDecorationRoundRectangle),
+    : ImgWindow(WindowGeometry::Centered(info::kWindowWidth, info::kWindowHeight, xplm_WindowDecorationRoundRectangle),
                 xplm_WindowDecorationRoundRectangle,
                 xplm_WindowLayerFloatingWindows),
       mSpotEditor(spotEditor),
@@ -101,8 +98,8 @@ PluginWindow::PluginWindow(hotspot::SpotEditor& spotEditor, manip::ManipEditor& 
       mManipPage(manipEditor, MakeGoHome(this), pluginFolder),
       mUpdaterPage(updater, MakeGoHome(this), pluginFolder)
 {
-    SetWindowTitle("VRConfig Helper");
-    SetWindowResizingLimits(kWidth, kHeight, kWidth, kHeight);   // fixed size for every page
+    SetWindowTitle(std::string(info::kPluginName));
+    SetWindowResizingLimits(info::kWindowWidth, info::kWindowHeight, info::kWindowWidth, info::kWindowHeight);   // fixed size for every page
 
     // The ImgWindow constructor leaves this window's ImGui context current,
     // so the style set here belongs to this window only.
@@ -263,15 +260,16 @@ void PluginWindow::ui_popup_about()
     ImGui::SameLine(0.0f, style.ItemSpacing.x * 2.0f);
     ImGui::BeginGroup();
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
-    ImGui::TextUnformatted("VRConfig Helper");
-    ImGui::TextDisabled("Version %s", VRCONFIG_HELPER_VERSION);
+    ImGui::TextUnformatted(info::kPluginName.data());
+    ImGui::TextDisabled("%s", std::format("Version {}", info::kVersion).c_str());
     ImGui::Spacing();
-    ImGui::TextUnformatted("Designed by Snagar.Dev");
-    ImGui::TextUnformatted("Coded by Claude.Ai");
-    ImGui::TextUnformatted("License: Free");
+    ImGui::TextUnformatted(std::format("Designed by {}", info::kDesignedBy).c_str());
+    ImGui::TextUnformatted(std::format("Coded by {}", info::kCodedBy).c_str());
+    ImGui::TextUnformatted(std::format("License: {}", info::kLicense).c_str());
     ImGui::EndGroup();
     ImGui::Spacing();
-    ImGui::TextDisabled("Inspired by the \"VR Tools\" plugin, by jrKok.");
+    ImGui::TextDisabled("%s", info::kInspiredBy.data());
+    ui::ui_wrapped_text(std::string(info::kIconCredit).c_str(), &ui::theme::kTextDisabled);
     ImGui::Spacing();
     ui::ui_wrapped_text("Edits an aircraft's vrconfig file: VR teleport hotspots and the VR behaviour of its "
                         "knobs, switches and levers.", &ui::theme::kTextDisabled);

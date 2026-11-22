@@ -27,10 +27,7 @@
 #include "xp/Aircraft.h"
 #include "hotspot/SpotEditor.h"
 #include "util/FileUtil.h"
-
-#ifndef VRCONFIG_HELPER_VERSION
-#define VRCONFIG_HELPER_VERSION "0.0.0"
-#endif
+#include "SharedInfo.h"
 
 namespace {
 
@@ -42,9 +39,11 @@ using hpvr::hotspot::SpotEditor;
 using hpvr::manip::ManipEditor;
 using hpvr::manip::ManipUpdater;
 
-constexpr const char* kPluginName = "VRConfig Helper";
-constexpr const char* kPluginId   = "vrconfig_helper";       // signature, log file name
-constexpr const char* kPluginDesc = "VR configuration helper: teleport hotspots and manipulators";
+// The plugin id: X-Plane's plugin signature and the log file name. It must stay the same
+// as the CMake project name (project(vrconfig_helper ...) in CMakeLists.txt), which names
+// the plugin folder and the .xpl file, and as PLUGIN_NAME in .github/workflows/release.yml.
+// Name, version and description: SharedInfo.h.
+constexpr const char* kPluginId = "vrconfig_helper";
 
 std::unique_ptr<PluginWindow> gWindow;
 SpotEditor                    gSpotEditor;      // outlives the window: unsaved changes survive closing it
@@ -107,7 +106,7 @@ void FollowVr(int msg)
             gWindow->SetWindowPositioningMode(xplm_WindowVR);
     } else if (msg == XPLM_MSG_EXITING_VR && gWindow->IsInVR()) {
         // The 2D geometry is lost while in VR: back to the middle of the screen.
-        const WindowGeometry centered = WindowGeometry::Centered(PluginWindow::kWidth, PluginWindow::kHeight);
+        const WindowGeometry centered = WindowGeometry::Centered(hpvr::info::kWindowWidth, hpvr::info::kWindowHeight);
         gWindow->SetWindowPositioningMode(xplm_WindowPositionFree);
         gWindow->SetWindowGeometry(centered.left, centered.top, centered.right, centered.bottom);
     }
@@ -119,23 +118,23 @@ void FollowVr(int msg)
 
 PLUGIN_API int XPluginStart(char* outName, char* outSig, char* outDesc)
 {
-    std::snprintf(outName, 256, "%s %s", kPluginName, VRCONFIG_HELPER_VERSION);
+    std::snprintf(outName, 256, "%s %s", hpvr::info::kPluginName.data(), hpvr::info::kVersion.data());
     std::strcpy(outSig, kPluginId);
-    std::strcpy(outDesc, kPluginDesc);
+    std::strcpy(outDesc, hpvr::info::kPluginDesc.data());
 
     XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
 
     hpvr::log::Init(kPluginId, PluginFolder());
-    LOG_INFO("{} version {} starting, log file: {}", kPluginName, VRCONFIG_HELPER_VERSION,
+    LOG_INFO("{} version {} starting, log file: {}", hpvr::info::kPluginName, hpvr::info::kVersion,
              hpvr::util::Utf8(hpvr::log::GetLogFilePath()));
 
     gCmdToggle = XPLMCreateCommand("vrconfig_helper/toggle_main_window",
                                    "VRConfig Helper: show/hide the window");
     XPLMRegisterCommandHandler(gCmdToggle, CommandHandler, 1, nullptr);
 
-    const int slot = XPLMAppendMenuItem(XPLMFindPluginsMenu(), kPluginName, nullptr, 0);
-    gMenu     = XPLMCreateMenu(kPluginName, XPLMFindPluginsMenu(), slot, nullptr, nullptr);
-    gMenuItem = XPLMAppendMenuItemWithCommand(gMenu, "Toggle Window", gCmdToggle);   // no check mark
+    const int slot = XPLMAppendMenuItem(XPLMFindPluginsMenu(), hpvr::info::kPluginName.data(), nullptr, 0);
+    gMenu     = XPLMCreateMenu(hpvr::info::kPluginName.data(), XPLMFindPluginsMenu(), slot, nullptr, nullptr);
+    gMenuItem = XPLMAppendMenuItemWithCommand(gMenu, hpvr::info::kMenuToggle.data(), gCmdToggle);   // no check mark
 
     LOG_INFO("started");
     return 1;

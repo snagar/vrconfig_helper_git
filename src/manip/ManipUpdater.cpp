@@ -52,8 +52,10 @@ std::string ManipUpdater::Identity(const vrconfig::ManipRecord& record) const
 
 // --- open / discard ---------------------------------------------------------------------------
 
-UpdaterOpen ManipUpdater::Open(const fs::path& vrconfigPath, bool forLoadedAircraft)
+UpdaterOpen ManipUpdater::Open(const fs::path& vrconfigPathIn, bool forLoadedAircraft)
 {
+    // A copy: callers may pass FilePath(), a reference into mFile, which Discard() resets.
+    const fs::path vrconfigPath = vrconfigPathIn;
     if (mOpen && mFile.FilePath() == vrconfigPath && ChangeCount() > 0) {
         mForLoadedAircraft = forLoadedAircraft;
         LOG_INFO("keeping {} unsaved manipulator updates of {}", ChangeCount(), util::Utf8(vrconfigPath.filename()));

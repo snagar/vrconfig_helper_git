@@ -694,9 +694,13 @@ void UpdaterPage::ui_find_row()
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Find");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(right - ImGui::GetCursorPosX() - kGroupW - ButtonWidth(all) - ButtonWidth(none) -
-                            style.ItemSpacing.x * 3.0f);
+    const float clearW = ImGui::GetFrameHeight();                // square Clear button, easy to hit in VR
+    ImGui::SetNextItemWidth(right - ImGui::GetCursorPosX() - clearW - kGroupW - ButtonWidth(all) - ButtonWidth(none) -
+                            style.ItemSpacing.x * 4.0f);
     ImGui::InputTextWithHint("##find", "name or path", mFind.data(), mFind.size());
+    ImGui::SameLine();
+    if (ui::ui_button(ICON_FA_TIMES "##clearfind", ImVec2(clearW, clearW), mFind[0] != '\0'))
+        mFind[0] = '\0';
     ImGui::SameLine();
     ImGui::SetNextItemWidth(kGroupW);
     const std::string preview = mGroupFilter ? ui::EllipsisMiddle(lmbda_groupLabel(*mGroupFilter), kGroupW - 30.0f)

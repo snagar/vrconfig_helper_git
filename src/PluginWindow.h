@@ -32,9 +32,6 @@ enum class Page {
 
 class PluginWindow : public ImgWindow {
 public:
-    static constexpr int kWidth  = 520;
-    static constexpr int kHeight = 730;
-
     // `pluginFolder`: the plugin's folder (manip_types.ini, manip_actions.ini).
     PluginWindow(hotspot::SpotEditor& spotEditor, manip::ManipEditor& manipEditor, manip::ManipUpdater& updater,
                  const std::filesystem::path& pluginFolder);

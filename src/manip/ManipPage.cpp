@@ -2,6 +2,7 @@
 
 #include "ManipPage.h"
 
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <format>
@@ -57,6 +58,13 @@ const char* kExplainText =
     "- X-Plane reads the vrconfig file when the aircraft loads: reload it to try the new settings.";
 
 // "{up_down}" / "{left_right}" in an ini label are drawn as arrows.
+std::string Lower(std::string text)
+{
+    for (char& character : text)
+        character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    return text;
+}
+
 std::string TypeLabel(const std::string& label)
 {
     std::string text = label;
@@ -167,6 +175,8 @@ void ManipPage::OpenTypeList(const std::string& type)
         mListItems.push_back(i);
         mListTicked.push_back(mUnpicked.contains(mSelected->manips[i].Key()) ? 0 : 1);
     }
+    mListFind[0] = '\0';                               // every manipulator shown again
+    mListGroup.reset();
     mAskTypeList = true;
 }
 
@@ -990,9 +1000,64 @@ void ManipPage::ui_popup_type_list()
                         "extract again).");
     ImGui::PopStyleColor();
 
+    // Find and group: show only the manipulators whose name, dataref / command or OBJ
+    // file holds the text, and whose first dataref / command path is the group (as on
+    // the Updater page). All / None then tick only the ones shown; OK keeps every tick.
+    std::map<std::string, std::size_t> groups;
+    for (const std::size_t index : mListItems)
+        ++groups[ManipGroup(mSelected->manips[index].refs)];
+    auto lmbda_groupLabel = [](const std::string& group) { return group.empty() ? std::string("(no path)") : group; };
+    constexpr float kGroupW = 170.0f;
+    const float clearW = ImGui::GetFrameHeight();      // square Clear button, easy to hit in VR
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Find");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearW - kGroupW - ImGui::GetStyle().ItemSpacing.x * 2.0f);
+    ImGui::InputTextWithHint("##listfind", "name, dataref or file", mListFind.data(), mListFind.size());
+    ImGui::SameLine();
+    if (ui::ui_button(ICON_FA_TIMES "##clearlistfind", ImVec2(clearW, clearW), mListFind[0] != '\0'))
+        mListFind[0] = '\0';
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(kGroupW);
+    const std::string groupPreview = mListGroup ? ui::EllipsisMiddle(lmbda_groupLabel(*mListGroup), kGroupW - 30.0f)
+                                                : std::string("All groups");
+    ImGui::PushStyleColor(ImGuiCol_Text, mListGroup ? theme::kSameFolderText : theme::kText);
+    const bool groupOpen = ImGui::BeginCombo("##listgroup", groupPreview.c_str(), ImGuiComboFlags_HeightLarge);
+    ImGui::PopStyleColor();
+    if (groupOpen) {
+        if (ImGui::Selectable("All groups", !mListGroup))
+            mListGroup.reset();
+        for (const auto& [group, count] : groups) {
+            const std::string label = std::format("{} ({})##lg_{}", lmbda_groupLabel(group), count, group);
+            if (ImGui::Selectable(label.c_str(), mListGroup && *mListGroup == group))
+                mListGroup = group;
+        }
+        ImGui::EndCombo();
+    }
+    const std::string find = Lower(mListFind.data());
+    std::vector<std::size_t> shown;                    // positions in mListItems
+    for (std::size_t item = 0; item < mListItems.size(); ++item) {
+        if (mListGroup && ManipGroup(mSelected->manips[mListItems[item]].refs) != *mListGroup)
+            continue;
+        if (!find.empty()) {
+            const ObjManip& manip = mSelected->manips[mListItems[item]];
+            std::string haystack = Lower(manip.DisplayName() + " " + util::Utf8(manip.objFile.filename()));
+            for (const std::string& tooltip : manip.tooltips)
+                haystack += " " + Lower(tooltip);
+            for (const std::string& ref : manip.refs)
+                haystack += " " + Lower(ref);
+            if (haystack.find(find) == std::string::npos)
+                continue;
+        }
+        shown.push_back(item);
+    }
+
     const ImGuiStyle& style = ImGui::GetStyle();
     const float rowH   = ImGui::GetFrameHeightWithSpacing();
-    const float height = std::min(rowH * static_cast<float>(mListItems.size()) + style.WindowPadding.y * 2.0f, 380.0f);
+    // Sized by all the manipulators (not the ones shown), so the popup keeps its size
+    // while typing; one row shorter than before to make room for Find.
+    const float height = std::min(rowH * static_cast<float>(mListItems.size()) + style.WindowPadding.y * 2.0f,
+                                  380.0f - rowH);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::kInputBg);
     ImGui::PushStyleColor(ImGuiCol_FrameBg, theme::kPanelBg);
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, theme::kPanelBgDark);
@@ -1001,9 +1066,10 @@ void ManipPage::ui_popup_type_list()
             ImGui::TableSetupColumn("name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("file", ImGuiTableColumnFlags_WidthFixed, 190.0f);
             ImGuiListClipper clipper;
-            clipper.Begin(static_cast<int>(mListItems.size()));
+            clipper.Begin(static_cast<int>(shown.size()));
             while (clipper.Step()) {
-                for (int item = clipper.DisplayStart; item < clipper.DisplayEnd; ++item) {
+                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+                    const int item = static_cast<int>(shown[static_cast<std::size_t>(row)]);
                     const ObjManip& manip = mSelected->manips[mListItems[static_cast<std::size_t>(item)]];
                     ImGui::PushID(item);
                     ImGui::TableNextRow();
@@ -1025,19 +1091,28 @@ void ManipPage::ui_popup_type_list()
             }
             ImGui::EndTable();
         }
+        if (shown.empty())
+            ImGui::TextDisabled("%s", find.empty() ? "No manipulator in this group"
+                                                   : std::format("No manipulator matches \"{}\"", mListFind.data()).c_str());
     }
     ImGui::EndChild();
     ImGui::PopStyleColor(3);
 
-    const std::size_t ticked = static_cast<std::size_t>(std::count(mListTicked.begin(), mListTicked.end(), 1));
+    // All / None: the manipulators shown (all of them without a Find text).
     if (ui::ui_button("All"))
-        std::fill(mListTicked.begin(), mListTicked.end(), 1);
+        for (const std::size_t item : shown)
+            mListTicked[item] = 1;
     ImGui::SameLine();
     if (ui::ui_button("None"))
-        std::fill(mListTicked.begin(), mListTicked.end(), 0);
+        for (const std::size_t item : shown)
+            mListTicked[item] = 0;
+    const std::size_t ticked = static_cast<std::size_t>(std::count(mListTicked.begin(), mListTicked.end(), 1));
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(std::format("{} of {} picked", ticked, mListItems.size()).c_str());
+    const std::string count = shown.size() == mListItems.size()
+        ? std::format("{} of {} picked", ticked, mListItems.size())
+        : std::format("{} of {} picked \u00B7 {} shown", ticked, mListItems.size(), shown.size());
+    ImGui::TextUnformatted(count.c_str());
 
     ImGui::Spacing();
     const ImVec2 size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);

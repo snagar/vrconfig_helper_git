@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
@@ -105,6 +106,8 @@ private:
     std::string                      mListType;         // type shown in the list popup
     std::vector<std::size_t>         mListItems;        // its manipulators (indexes into mSelected->manips)
     std::vector<char>                mListTicked;       // being edited in the list popup
+    std::array<char, 128>            mListFind{};       // the list popup's Find text (cleared when it opens)
+    std::optional<std::string>       mListGroup;        // the list popup's group filter (none = all groups)
     std::set<std::string>            mCollapsed;        // result groups folded
 
     std::string                      mNotice;

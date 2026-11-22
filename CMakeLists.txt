@@ -35,8 +35,12 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "macOS: oldest supported mac
 cmake_policy(SET CMP0091 NEW)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# The project name is the plugin id: it names the plugin folder and the .xpl file
+# (${PROJECT_NAME} below). It must stay the same as kPluginId in src/vrconfig_helper.cpp
+# (X-Plane's plugin signature and the log file name) and as PLUGIN_NAME in
+# .github/workflows/release.yml. The version and the other plugin information are in
+# src/SharedInfo.h, not here.
 project(vrconfig_helper
-    VERSION 0.9.0
     DESCRIPTION "VRConfig Helper - X-Plane plugin"
     LANGUAGES C CXX)
 
@@ -228,11 +232,9 @@ add_library(fonts INTERFACE)
 target_include_directories(fonts SYSTEM INTERFACE "${FONTS_DIR}")
 
 # --- Plugin -------------------------------------------------------------------------
-# Copy every log message to X-Plane's Log.txt as well (runtime: log::SetMirrorToXPlane).
-option(VRCH_LOG_TO_XPLANE "Default: also write plugin log messages to X-Plane's Log.txt" ON)
-
 add_library(${PROJECT_NAME} MODULE
     src/vrconfig_helper.cpp
+    src/SharedInfo.h
     src/PluginWindow.cpp
     src/PluginWindow.h
     src/Fonts.cpp
@@ -278,9 +280,6 @@ add_library(${PROJECT_NAME} MODULE
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE
-    VRCONFIG_HELPER_VERSION="${PROJECT_VERSION}"
-    VRCH_LOG_TO_XPLANE_DEFAULT=$<BOOL:${VRCH_LOG_TO_XPLANE}>)
 if(MSVC)
     # /Zc:preprocessor: the standard preprocessor (the LOG_* macros use __VA_OPT__).
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /permissive- /Zc:preprocessor /Zc:__cplusplus)
