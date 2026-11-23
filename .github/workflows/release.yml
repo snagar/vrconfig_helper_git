@@ -96,12 +96,9 @@ jobs:
         shell: bash
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          APT_OPTS="-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=60"
-          apt-get $APT_OPTS update
-          apt-get $APT_OPTS install -y --no-install-recommends software-properties-common gpg-agent ca-certificates git
-          add-apt-repository -y ppa:ubuntu-toolchain-r/test
-          apt-get $APT_OPTS update
-          apt-get $APT_OPTS install -y --no-install-recommends gcc-13 g++-13 make cmake libgl-dev file unzip
+          APT_OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=60"
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends gcc-13 g++-13 make cmake libgl-dev file unzip
 
       - uses: actions/checkout@v6
 
