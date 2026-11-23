@@ -22,7 +22,7 @@
 namespace hpvr::info {
 
 // --- The plugin ----------------------------------------------------------------------
-inline constexpr std::string_view kVersion     = "1.0";     // change before a release; the
+inline constexpr std::string_view kVersion     = "1.1";     // change before a release; the
                                                             // GitHub workflow reads it here
 inline constexpr std::string_view kPluginName  = "VRConfig Helper";
 inline constexpr std::string_view kPluginDesc  = "VR configuration helper: teleport hotspots and manipulators";
@@ -35,6 +35,9 @@ inline constexpr std::string_view kLicense     = "Free";
 inline constexpr std::string_view kInspiredBy  = "Inspired by the \"VR Tools\" plugin, by jrKok.";
 inline constexpr std::string_view kIconCredit  = "Icons: Font Awesome Free 5 (fa-solid-900) by Fonticons, Inc. - "
                                                  "icons CC BY 4.0, font SIL OFL 1.1 (fontawesome.com).";
+inline constexpr std::string_view kLibraryCredit = "Built with Dear ImGui by Omar Cornut (MIT licence) and ImgWindow "
+                                                   "by Christopher Collins, extended by Steven L. Goldberg (slgoldberg) "
+                                                   "(BSD 3-clause licence).";
 
 // --- Log file --------------------------------------------------------------------------
 inline constexpr bool           kLogToXPlaneDefault = true;                 // also copy each line to X-Plane's Log.txt

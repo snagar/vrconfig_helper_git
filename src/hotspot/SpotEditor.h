@@ -7,9 +7,9 @@
 //  * Save writes every change at once through VrConfigFile: updates, then
 //    deletions, then new blocks; afterwards the file is read again.
 //  * Backup: the first Save of an existing file in this X-Plane run copies it to
-//    "<file>.bak". Later saves in the same run keep that backup; the first save
+//    "<file>.hotspot.bak". Later saves in the same run keep that backup; the first save
 //    in a later run replaces it. A new file (created by the plugin) has no backup.
-//  * RestoreBackup puts the .bak back (kept, can be restored again).
+//  * RestoreBackup puts the backup back (kept, can be restored again).
 //  * Commas between the numbers of a hotspot (written by some tools) make it
 //    read-only; FixCommas removes them on Save, like any other change.
 //  * "Saved this run" (green): a spot that is not identical to any spot of
@@ -157,6 +157,7 @@ public:
 
     // --- backup ---
     std::filesystem::path BackupPath() const;
+    std::filesystem::path RestorePath() const;                 // BackupPath(), or the name used up to v1.0
     bool HasBackup() const;
     bool BackupMadeThisRun() const;
     std::optional<Clock::time_point> BackupTime() const;

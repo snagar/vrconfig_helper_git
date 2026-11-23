@@ -166,6 +166,7 @@ public:
     // Writes the lines to `target` (default: the loaded file) through a
     // temporary file and a rename, so the target is never half written.
     // Adds the plugin's signature line after the header first (see AddSignature).
+    // After a successful save, a copy goes to <file>.last_save (replaced each time).
     bool Save(const std::filesystem::path& target = {});
 
     // Adds "# Made with VRConfig Helper - by Snagar.Dev" (file created by the plugin)

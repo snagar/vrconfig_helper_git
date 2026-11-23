@@ -606,14 +606,27 @@ SaveResult SpotEditor::Save(bool overwriteOutsideChanges)
 fs::path SpotEditor::BackupPath() const
 {
     fs::path backup = mFile.FilePath();
-    backup += ".bak";
+    backup += ".hotspot.bak";
     return backup;
+}
+
+// The backup to restore: the current name, or the name used up to v1.0
+// (".bak") when only that one exists, so an older backup is still found.
+fs::path SpotEditor::RestorePath() const
+{
+    std::error_code ec;
+    const fs::path current = BackupPath();
+    if (fs::exists(current, ec))
+        return current;
+    fs::path older = mFile.FilePath();
+    older += ".bak";
+    return fs::exists(older, ec) ? older : current;
 }
 
 bool SpotEditor::HasBackup() const
 {
     std::error_code ec;
-    return mOpen && mFileOnDisk && fs::exists(BackupPath(), ec);
+    return mOpen && mFileOnDisk && fs::exists(RestorePath(), ec);
 }
 
 bool SpotEditor::BackupMadeThisRun() const
@@ -626,7 +639,7 @@ std::optional<SpotEditor::Clock::time_point> SpotEditor::BackupTime() const
     std::error_code ec;
     if (!HasBackup())
         return std::nullopt;
-    const auto ft = fs::last_write_time(BackupPath(), ec);
+    const auto ft = fs::last_write_time(RestorePath(), ec);
     if (ec)
         return std::nullopt;
     return util::ToSystemTime(ft);
@@ -639,7 +652,7 @@ bool SpotEditor::RestoreBackup()
         return false;
     }
     const fs::path file = mFile.FilePath();
-    if (!CopyFileSafely(BackupPath(), file, mLastError)) {
+    if (!CopyFileSafely(RestorePath(), file, mLastError)) {
         LOG_ERROR("restore failed: {}", mLastError);
         return false;
     }

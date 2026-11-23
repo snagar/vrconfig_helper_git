@@ -182,5 +182,8 @@ inline const ImVec4 color_vec4_hpvr_error_text                = { 0.650f, 0.080f
 inline const ImVec4 color_vec4_hpvr_advanced                  = { 0.502f, 0.361f, 0.745f, 1.0f };   // Adv button (purple)
 inline const ImVec4 color_vec4_hpvr_same_folder_text          = { 0.090f, 0.310f, 0.700f, 1.0f };   // aircraft in the loaded aircraft's folder (blue)
 inline const ImVec4 color_vec4_hpvr_other_folder_text         = { 0.720f, 0.100f, 0.100f, 1.0f };   // aircraft in another folder (red)
+inline const ImVec4 color_vec4_hpvr_vr_note_bg                = { 0.820f, 0.980f, 0.980f, 1.0f };   // VR note: background (light aqua)
+inline const ImVec4 color_vec4_hpvr_vr_note_border            = { 0.000f, 0.780f, 0.800f, 1.0f };   // VR note: border (aqua)
+inline const ImVec4 color_vec4_hpvr_vr_note_text              = { 0.000f, 0.420f, 0.450f, 1.0f };   // VR note: title text (dark cyan)
 
 } // namespace hpvr::color

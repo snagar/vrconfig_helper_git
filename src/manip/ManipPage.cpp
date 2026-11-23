@@ -52,8 +52,10 @@ const char* kExplainText =
     "- Defaults come from each type's template in the ini (knobs: DEG_PER_ACTION 5, altitude 10, "
     "selectors 30).\n"
     "- Nothing is written before Save. Cancel changes unticks everything.\n"
-    "- The first Save in this X-Plane run makes a backup: <aircraft>_vrconfig.txt.manip.bak "
+    "- The first Save in this X-Plane run makes a backup: <aircraft>_vrconfig.txt.extract.bak "
     "(separate from the hotspot backup). Restore backup puts it back.\n"
+    "- Every Save also keeps a copy of the saved file: <aircraft>_vrconfig.txt.last_save. An aircraft "
+    "update that replaces the vrconfig file leaves it alone, so your work is not lost.\n"
     "- Loading or reloading an aircraft discards unsaved changes.\n"
     "- X-Plane reads the vrconfig file when the aircraft loads: reload it to try the new settings.";
 
@@ -812,26 +814,26 @@ void ManipPage::ui_status_and_save()
     }
 
     const float  helpW = ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x;
-    const ImVec2 size(ui::ui_fill_width(3, helpW), 40.0f);
-    if (ui::ui_color_button(ICON_FA_SAVE " Save", size, theme::kChanged, theme::kChangedHover,
+    const ImVec2 vec_button_size(ui::ui_fill_width(3, helpW), 40.0f);
+    if (ui::ui_color_button(ICON_FA_SAVE " Save", vec_button_size, theme::kChanged, theme::kChangedHover,
                             theme::kChangedActive, changes > 0))
         DoSave(false);
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_TIMES " Cancel changes", size, changes > 0))
+    if (ui::ui_button(ICON_FA_TIMES " Cancel changes", vec_button_size, changes > 0))
         mAskCancel = true;
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_HISTORY " Restore backup", size, mEditor.HasBackup()))
+    if (ui::ui_button(ICON_FA_HISTORY " Restore backup", vec_button_size, mEditor.HasBackup()))
         mAskRestore = true;
     ImGui::SameLine();
     if (const auto backupTime = mEditor.BackupTime()) {
         const std::string help = std::format(
             "Backup of the vrconfig file before the first manipulator save, made at {}{} "
-            "(<aircraft>_vrconfig.txt.manip.bak). Restoring discards all manipulator saves made since "
+            "(<aircraft>_vrconfig.txt.extract.bak). Restoring discards all manipulator saves made since "
             "then, and any unsaved changes.", hotspot::ClockTime(*backupTime),
             mEditor.BackupMadeThisRun() ? " in this X-Plane run" : " in an earlier X-Plane run");
         ui::ui_help_marker(help.c_str());
     } else {
-        ui::ui_help_marker("A backup (<aircraft>_vrconfig.txt.manip.bak) is made the first time you save "
+        ui::ui_help_marker("A backup (<aircraft>_vrconfig.txt.extract.bak) is made the first time you save "
                            "manipulators of this aircraft in this X-Plane run.");
     }
 }
@@ -970,13 +972,13 @@ void ManipPage::ui_popup_files()
     ImGui::TextUnformatted(std::format("{} of {} files", ticked, files.size()).c_str());
 
     ImGui::Spacing();
-    const ImVec2 size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);
-    if (ui::ui_color_button(ICON_FA_CHECK " Use selected files", size, theme::kSaved, ticked > 0)) {
+    const ImVec2 vec_button_size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);
+    if (ui::ui_color_button(ICON_FA_CHECK " Use selected files", vec_button_size, theme::kSaved, ticked > 0)) {
         UseFiles(mPopupTicked);
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ui::ui_button("Cancel", size))
+    if (ui::ui_button("Cancel", vec_button_size))
         ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
@@ -1115,8 +1117,8 @@ void ManipPage::ui_popup_type_list()
     ImGui::TextUnformatted(count.c_str());
 
     ImGui::Spacing();
-    const ImVec2 size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);
-    if (ui::ui_color_button(ICON_FA_CHECK " OK", size, theme::kSaved)) {
+    const ImVec2 vec_button_size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);
+    if (ui::ui_color_button(ICON_FA_CHECK " OK", vec_button_size, theme::kSaved)) {
         for (std::size_t item = 0; item < mListItems.size(); ++item) {
             const std::string key = mSelected->manips[mListItems[item]].Key();
             if (mListTicked[item])
@@ -1128,7 +1130,7 @@ void ManipPage::ui_popup_type_list()
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ui::ui_button("Cancel", size))
+    if (ui::ui_button("Cancel", vec_button_size))
         ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }

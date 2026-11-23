@@ -22,7 +22,7 @@ constexpr float kHoldRateStart = 4.0f;   // steps per second when repeating star
 constexpr float kHoldRateMax   = 60.0f;  // steps per second after a long hold
 constexpr float kHoldRampTime  = 3.0f;   // s to go from start to max rate
 
-const ImVec2 kPopupButton(150.0f, 36.0f);
+const ImVec2 kVecPopupButtonSize(150.0f, 36.0f);
 
 ImVec4 Shade(const ImVec4& baseColor, float factor)
 {
@@ -95,9 +95,9 @@ void ui_help_marker(const char* desc, const ImVec4& textColor)
     }
 }
 
-float ui_hold_button(const char* label, const ImVec2& size, bool enabled)
+float ui_hold_button(const char* label, const ImVec2& vec_button_size, bool enabled)
 {
-    ui_color_button(label, size, theme::kButton, theme::kButtonHover, theme::kButtonActive, enabled);
+    ui_color_button(label, vec_button_size, theme::kButton, theme::kButtonHover, theme::kButtonActive, enabled);
     if (!enabled)
         return 0.0f;
     if (ImGui::IsItemActivated())
@@ -121,7 +121,7 @@ float ui_hold_button(const char* label, const ImVec2& size, bool enabled)
     return steps;
 }
 
-bool ui_color_button(const char* label, const ImVec2& size, const ImVec4& color,
+bool ui_color_button(const char* label, const ImVec2& vec_button_size, const ImVec4& color,
                      const ImVec4& hover, const ImVec4& active, bool enabled)
 {
     ImGui::BeginDisabled(!enabled);
@@ -129,42 +129,42 @@ bool ui_color_button(const char* label, const ImVec2& size, const ImVec4& color,
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, enabled ? hover  : theme::kButtonDisabled);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  enabled ? active : theme::kButtonDisabled);
     ImGui::PushStyleColor(ImGuiCol_Text, theme::kTextOnColor);
-    const bool pressed = ImGui::Button(label, size);
+    const bool pressed = ImGui::Button(label, vec_button_size);
     ImGui::PopStyleColor(4);
     ImGui::EndDisabled();
     return pressed && enabled;
 }
 
-bool ui_color_button(const char* label, const ImVec2& size, const ImVec4& color, bool enabled)
+bool ui_color_button(const char* label, const ImVec2& vec_button_size, const ImVec4& color, bool enabled)
 {
-    return ui_color_button(label, size, color, Shade(color, 1.12f), Shade(color, 0.85f), enabled);
+    return ui_color_button(label, vec_button_size, color, Shade(color, 1.12f), Shade(color, 0.85f), enabled);
 }
 
-bool ui_button(const char* label, const ImVec2& size, bool enabled)
+bool ui_button(const char* label, const ImVec2& vec_button_size, bool enabled)
 {
-    return ui_color_button(label, size, theme::kButton, theme::kButtonHover, theme::kButtonActive, enabled);
+    return ui_color_button(label, vec_button_size, theme::kButton, theme::kButtonHover, theme::kButtonActive, enabled);
 }
 
 void ui_status_strip(const std::string& text, const ImVec4& bg, const ImVec4& textColor)
 {
-    const ImVec2 pos    = ImGui::GetCursorScreenPos();
+    const ImVec2 vec_strip_pos    = ImGui::GetCursorScreenPos();
     const float  width  = ImGui::GetContentRegionAvail().x;
     const float  pad    = ImGui::GetStyle().FramePadding.y + 2.0f;
     const float  wrap   = width - 2.0f * ImGui::GetStyle().FramePadding.x;
-    const ImVec2 tsize  = ImGui::CalcTextSize(text.c_str(), nullptr, false, wrap);
-    const float  height = tsize.y + 2.0f * pad;
+    const ImVec2 vec_text_size  = ImGui::CalcTextSize(text.c_str(), nullptr, false, wrap);
+    const float  height = vec_text_size.y + 2.0f * pad;
 
     ImGui::GetWindowDrawList()->AddRectFilled(
-        pos, ImVec2(pos.x + width, pos.y + height),
+        vec_strip_pos, ImVec2(vec_strip_pos.x + width, vec_strip_pos.y + height),
         ImGui::GetColorU32(bg), ImGui::GetStyle().FrameRounding);
 
-    ImGui::SetCursorScreenPos(ImVec2(pos.x + ImGui::GetStyle().FramePadding.x, pos.y + pad));
+    ImGui::SetCursorScreenPos(ImVec2(vec_strip_pos.x + ImGui::GetStyle().FramePadding.x, vec_strip_pos.y + pad));
     ImGui::PushStyleColor(ImGuiCol_Text, textColor);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap);
     ImGui::TextUnformatted(text.c_str());
     ImGui::PopTextWrapPos();
     ImGui::PopStyleColor();
-    ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + height + ImGui::GetStyle().ItemSpacing.y));
+    ImGui::SetCursorScreenPos(ImVec2(vec_strip_pos.x, vec_strip_pos.y + height + ImGui::GetStyle().ItemSpacing.y));
     ImGui::Dummy(ImVec2(0, 0));
 }
 
@@ -235,14 +235,14 @@ void ui_step_title(int number, const char* title, bool done, bool current, const
 {
     ImGui::Spacing();
     const float  radius = ImGui::GetTextLineHeight() * 0.62f;
-    const ImVec2 at     = ImGui::GetCursorScreenPos();
-    const ImVec2 center(at.x + radius, at.y + ImGui::GetTextLineHeight() * 0.5f);
+    const ImVec2 vec_badge_pos     = ImGui::GetCursorScreenPos();
+    const ImVec2 vec_badge_center(vec_badge_pos.x + radius, vec_badge_pos.y + ImGui::GetTextLineHeight() * 0.5f);
     const ImVec4& badge = done ? theme::kSaved : current ? theme::kButton : theme::kTextDisabled;
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddCircleFilled(center, radius, ImGui::ColorConvertFloat4ToU32(badge));
+    draw->AddCircleFilled(vec_badge_center, radius, ImGui::ColorConvertFloat4ToU32(badge));
     const std::string mark = done ? std::string(ICON_FA_CHECK) : std::to_string(number);
-    const ImVec2 markSize = ImGui::CalcTextSize(mark.c_str());
-    draw->AddText(ImVec2(center.x - markSize.x * 0.5f, center.y - markSize.y * 0.5f),
+    const ImVec2 vec_mark_size = ImGui::CalcTextSize(mark.c_str());
+    draw->AddText(ImVec2(vec_badge_center.x - vec_mark_size.x * 0.5f, vec_badge_center.y - vec_mark_size.y * 0.5f),
                   ImGui::ColorConvertFloat4ToU32(theme::kTextOnColor), mark.c_str());
     ImGui::Dummy(ImVec2(radius * 2.0f, ImGui::GetTextLineHeight()));
     ImGui::SameLine();
@@ -265,9 +265,9 @@ float ui_fill_width(int count, float reserve)
 
 void ui_popup_center_next()
 {
-    const ImVec2 center(ImGui::GetWindowPos().x + ImGui::GetWindowWidth() * 0.5f,
+    const ImVec2 vec_window_center(ImGui::GetWindowPos().x + ImGui::GetWindowWidth() * 0.5f,
                         ImGui::GetWindowPos().y + ImGui::GetWindowHeight() * 0.5f);
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(vec_window_center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSizeConstraints(
         ImVec2(ImGui::GetWindowWidth() * 0.8f, 0.0f),
         ImVec2(ImGui::GetWindowWidth() - 30.0f, ImGui::GetWindowHeight() - 30.0f));
@@ -284,12 +284,12 @@ PopupAnswer ui_popup_yes_no(const char* id, const YesNoText& text)
         if (!text.note.empty())
             ui_wrapped_text(text.note, &text.noteColor);
         ImGui::Spacing();
-        if (ui_color_button(text.yesLabel, kPopupButton, text.yesColor)) {
+        if (ui_color_button(text.yesLabel, kVecPopupButtonSize, text.yesColor)) {
             answer = PopupAnswer::Yes;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ui_color_button(text.noLabel, kPopupButton, text.noColor)) {
+        if (ui_color_button(text.noLabel, kVecPopupButtonSize, text.noColor)) {
             answer = PopupAnswer::No;
             ImGui::CloseCurrentPopup();
         }
@@ -304,7 +304,7 @@ void ui_popup_message(const char* id, const std::string& message, const char* cl
     if (ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         ui_wrapped_text(message);
         ImGui::Spacing();
-        if (ui_button(closeLabel, kPopupButton))
+        if (ui_button(closeLabel, kVecPopupButtonSize))
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }

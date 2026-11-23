@@ -28,6 +28,7 @@ struct DataRefs {
     XPLMDataRef refPointY = nullptr, refPointZ = nullptr;
     XPLMDataRef uiName = nullptr;
     XPLMDataRef viewIsExternal = nullptr;
+    XPLMDataRef vrEnabled = nullptr;
     bool        looked = false;
 };
 
@@ -47,6 +48,7 @@ DataRefs& Refs()
         refs.refPointZ       = XPLMFindDataRef("sim/aircraft/weight/acf_cgZ_original");
         refs.uiName          = XPLMFindDataRef("sim/aircraft/view/acf_ui_name");
         refs.viewIsExternal  = XPLMFindDataRef("sim/graphics/view/view_is_external");
+        refs.vrEnabled       = XPLMFindDataRef("sim/graphics/VR/enabled");
     }
     return refs;
 }
@@ -85,6 +87,12 @@ std::optional<UserAircraft> GetUserAircraft()
 bool IsTeleportedOutside()
 {
     return Refs().teleportOutside && XPLMGetDatai(Refs().teleportOutside) != 0;
+}
+
+bool IsInVR()
+{
+    const DataRefs& refs = Refs();
+    return refs.vrEnabled && XPLMGetDatai(refs.vrEnabled) != 0;
 }
 
 bool IsInCockpitView()

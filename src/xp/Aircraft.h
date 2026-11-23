@@ -44,6 +44,8 @@ std::optional<HeadPose> GetHeadPose(const vrconfig::VrConfigFile& file, std::str
 
 bool IsTeleportedOutside();
 bool IsInCockpitView();
+// True while X-Plane shows the world in a VR headset (sim/graphics/VR/enabled).
+bool IsInVR();
 
 // Heading the camera looks at (degrees, 0 = nose, 90 = right wing), while in
 // the cockpit and not teleported outside; empty otherwise.

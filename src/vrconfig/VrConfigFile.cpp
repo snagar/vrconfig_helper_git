@@ -833,6 +833,17 @@ bool VrConfigFile::Save(const fs::path& target)
         return false;
     }
     LOG_INFO("saved {}", util::Utf8(dest));
+
+    // A copy of every save, <file>.last_save, replaced each time: an aircraft update that
+    // replaces the vrconfig file leaves it alone. Not being able to write it does not
+    // fail the save (the file itself is saved).
+    fs::path lastSave = dest;
+    lastSave += ".last_save";
+    std::string copyError;
+    if (util::CopyFileSafely(dest, lastSave, copyError))
+        LOG_INFO("copy kept: {}", util::Utf8(lastSave));
+    else
+        LOG_WARN("could not keep a copy of the save: {}", copyError);
     return true;
 }
 

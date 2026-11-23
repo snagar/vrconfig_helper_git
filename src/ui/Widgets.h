@@ -26,18 +26,18 @@ void ui_help_marker(const char* desc, const ImVec4& textColor = theme::kHelpText
 
 // Tap & hold button for VR. Returns the number of steps to apply this frame:
 // a tap gives 1; holding repeats after a short pause, faster the longer it is held.
-float ui_hold_button(const char* label, const ImVec2& size = ImVec2(0, 0), bool enabled = true);
+float ui_hold_button(const char* label, const ImVec2& vec_button_size = ImVec2(0, 0), bool enabled = true);
 
 // Button with its own background colour (hover / pressed shades derived from it);
 // white caption. Disabled = grey, not clickable.
-bool ui_color_button(const char* label, const ImVec2& size, const ImVec4& color, bool enabled = true);
+bool ui_color_button(const char* label, const ImVec2& vec_button_size, const ImVec4& color, bool enabled = true);
 
 // Same, with explicit hover and pressed colours.
-bool ui_color_button(const char* label, const ImVec2& size, const ImVec4& color,
+bool ui_color_button(const char* label, const ImVec2& vec_button_size, const ImVec4& color,
                      const ImVec4& hover, const ImVec4& active, bool enabled = true);
 
 // Standard blue button that can be disabled.
-bool ui_button(const char* label, const ImVec2& size = ImVec2(0, 0), bool enabled = true);
+bool ui_button(const char* label, const ImVec2& vec_button_size = ImVec2(0, 0), bool enabled = true);
 
 // Full-width coloured strip with wrapped text (status line).
 void ui_status_strip(const std::string& text, const ImVec4& bg, const ImVec4& textColor);

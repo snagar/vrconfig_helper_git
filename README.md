@@ -11,7 +11,7 @@ vrconfig file with default VR settings) and **VRConfig Manipulator Updater**
 forms open as popups on top of the page. **About** (top right) shows the version, a
 drawn logo (a VR headset whose right lens is a knob, over a teleport ring), and
 "Designed by Snagar.Dev, Coded by Claude.Ai, License: Free" and "Inspired by the
-"VR Tools" plugin, by jrKok", and the Font Awesome icon credit (see Credits). At the bottom of the Home page, in black, a note asks developers
+"VR Tools" plugin, by jrKok", the Font Awesome icon credit and the Dear ImGui / ImgWindow credit (see Credits). At the bottom of the Home page, in black, a note asks developers
 who publish an aircraft made with the tool to credit it.
 
 ## Using it in X-Plane
@@ -49,9 +49,9 @@ src/
   hotspot/           SpotEditor (edit session, add/delete, save, backup, restore), SpotPage (the page)
   manip/             ManipTypes (manip_types.ini), ObjManips (finds / reads OBJ files),
                      ObjScanner (background thread: .acf object list + OBJ files, progress, abort), ManipEditor (edit session,
-                     ticks, save, .manip.bak backup), ManipPage (the page);
+                     ticks, save, .extract.bak backup), ManipPage (the page);
                      Updater page: ManipActions (manip_actions.ini), ManipBlock (one block: read,
-                     apply settings, check typed text), ManipUpdater (edit session, .manip.upd.bak),
+                     apply settings, check typed text), ManipUpdater (edit session, .updater.bak),
                      AircraftFinder (.acf files, background search), UpdaterPage (the page)
   util/              FileUtil: ReadAll, CopyFileSafely, WriteFileSafely (temporary file + rename),
                      Utf8 / PathFromUtf8 (paths as UTF-8 on every system);
@@ -200,8 +200,21 @@ Saving rules (also in the **Explain** popup):
   rename. If the file was changed by another program since it was read, you are
   asked before it is overwritten.
 * **Backup:** the first Save of an aircraft in an X-Plane run copies the file to
-  `<aircraft>_vrconfig.txt.bak`; later saves in that run keep it. The first save
+  `<aircraft>_vrconfig.txt.hotspot.bak`; later saves in that run keep it. The first save
   in the next run replaces it. **Restore backup** puts it back (repeatable).
+* **Last save:** every Save, on any screen, also copies the saved file to
+  `<aircraft>_vrconfig.txt.last_save` (`VrConfigFile::Save`), replaced each time. An
+  aircraft update that replaces the vrconfig file leaves it alone. Backups made
+  by v1.0 were named `.bak`, `.manip.bak`, `.manip.upd.bak`; **Restore backup**
+  still finds them (`RestorePath()`).
+* **In VR** (`sim/graphics/VR/enabled`): the headset sets the camera. An aqua note takes
+  the heading row's place (same height, the page does not move): the move buttons now
+  run X-Plane's view commands while held (`sim/general/forward`, `backward`, `left`,
+  `right`, `up`, `down`, as the arrow keys and `,` / `.`), so they move *you*, not the
+  hotspot; **Use my current head position** stores where you are. Turning, Go to
+  hotspot and Live view are off. The note warns that VR positions may not match 2D
+  (its (?) suggests defining hotspots in 2D); the Adv popup notes that pitch and roll
+  change the values but not your head in real time.
 * Files that use `REF_POINT_ACF` (X-Plane 12): the head position is converted with
   `sim/aircraft/weight/acf_cgY/Z_original` (feet). Not yet verified in X-Plane.
 
@@ -303,8 +316,8 @@ The page has two numbered steps; step 2 is greyed out until step 1 is done
   * saved rows turn green (*✓ saved*).
 * Saving works like the Hotspot page: nothing written before **Save**;
   **Cancel changes** unticks everything; the first Save in an X-Plane run backs
-  the file up to `<aircraft>_vrconfig.txt.manip.bak` (separate from the hotspot
-  `.bak`); **Restore backup**; aircraft load / reload discards unsaved changes.
+  the file up to `<aircraft>_vrconfig.txt.extract.bak` (separate from the hotspot
+  `.hotspot.bak`); **Restore backup**; aircraft load / reload discards unsaved changes.
   An aircraft without a vrconfig file gets one (header `A` / `1100` / `VRCONFIG`)
   on Save.
 * Not yet handled here: two different controls with the same type and commands
@@ -382,7 +395,7 @@ Two numbered steps; step 2 is greyed out until step 1 is done.
 
 Saving: nothing is written before **Save**; **Cancel changes** undoes every
 update (after a question listing them). The first Save of the file in an X-Plane
-run copies it to `<aircraft>_vrconfig.txt.manip.upd.bak` (apart from the hotspot
+run copies it to `<aircraft>_vrconfig.txt.updater.bak` (apart from the hotspot
 and Extract backups; the first save in a later run replaces it); **Restore
 backup**. If the file was changed by another program, **Save anyway** applies
 the updates to the blocks of the file as it is now (matched by type, references
@@ -522,4 +535,9 @@ ImGui::PopFont();
   the font file under the [SIL Open Font License 1.1](https://scripts.sil.org/OFL),
   the code under MIT (see [fontawesome.com/license/free](https://fontawesome.com/license/free)).
   The About box shows the same credit.
+* **Libraries:** [Dear ImGui](https://github.com/ocornut/imgui) by Omar Cornut (MIT
+  licence, `libs/imgui/LICENSE.txt`) and ImgWindow by Christopher Collins, extended by
+  Steven L. Goldberg ([slgoldberg](https://github.com/slgoldberg)) (BSD 3-clause licence,
+  `libs/ImgWindow/COPYING.md`); logging by loguru (public domain). The About
+  box credits Dear ImGui and ImgWindow.
 * **Inspired by** the "VR Tools" plugin, by jrKok.

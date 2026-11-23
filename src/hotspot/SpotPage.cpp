@@ -65,7 +65,9 @@ const char* kExplainText =
     "- Rename, Add and Delete are changes too: nothing is written before Save.\n"
     "- Save writes all changes to the aircraft's vrconfig file.\n"
     "- The first time you save an aircraft's hotspots in this X-Plane run, a backup of the original "
-    "file is made. Later saves don't change it.\n"
+    "file is made (<aircraft>_vrconfig.txt.hotspot.bak). Later saves don't change it.\n"
+    "- Every Save also keeps a copy of the saved file: <aircraft>_vrconfig.txt.last_save. An aircraft "
+    "update that replaces the vrconfig file leaves it alone, so your work is not lost.\n"
     "- Restore backup brings back the file as it was before your first save in this run. In the next "
     "X-Plane run, your first save replaces the backup.\n"
     "- Cancel changes discards everything not yet saved; you will be asked to confirm.\n"
@@ -338,21 +340,21 @@ void SpotPage::ui_spot_actions()
     }
 
     const float  helpW = ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x;
-    const ImVec2 size(ui::ui_fill_width(4, helpW), 38.0f);
+    const ImVec2 vec_button_size(ui::ui_fill_width(4, helpW), 38.0f);
     const std::size_t spotIndex = mSelected;
     const bool deleted  = mEditor.IsDeleted(spotIndex);
 
-    if (ui::ui_button(ICON_FA_PEN " Rename", size, mEditor.IsEditable(spotIndex))) {
+    if (ui::ui_button(ICON_FA_PEN " Rename", vec_button_size, mEditor.IsEditable(spotIndex))) {
         mRenaming    = true;
         mFocusRename = true;
         std::snprintf(mRenameText.data(), mRenameText.size(), "%s", mEditor.Edited(spotIndex).name.c_str());
     }
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_PLUS " Add", size))
+    if (ui::ui_button(ICON_FA_PLUS " Add", vec_button_size))
         OpenAddPopup();
     ImGui::SameLine();
     if (deleted) {
-        if (ui::ui_color_button(ICON_FA_UNDO " Undo delete", size, theme::kChanged, theme::kChangedHover,
+        if (ui::ui_color_button(ICON_FA_UNDO " Undo delete", vec_button_size, theme::kChanged, theme::kChangedHover,
                                 theme::kChangedActive)) {
             mEditor.UndoDelete(spotIndex);
             mNotice.clear();
@@ -360,14 +362,14 @@ void SpotPage::ui_spot_actions()
     } else {
         const SpotRecord* rec = mEditor.Record(spotIndex);
         const bool canDelete  = rec == nullptr || rec->endIdx != SpotRecord::kNoLine;
-        if (ui::ui_button(ICON_FA_TRASH " Delete", size, canDelete)) {
+        if (ui::ui_button(ICON_FA_TRASH " Delete", vec_button_size, canDelete)) {
             if (mEditor.Delete(spotIndex))                     // a new spot was removed at once
                 mSelected = std::min(spotIndex, mEditor.SpotCount() ? mEditor.SpotCount() - 1 : 0);
             mNotice.clear();
         }
     }
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_SYNC " Refresh", size)) {
+    if (ui::ui_button(ICON_FA_SYNC " Refresh", vec_button_size)) {
         if (mEditor.ChangeCount() > 0)
             mAskRefresh = true;
         else
@@ -551,19 +553,24 @@ void SpotPage::ui_move_controls()
     ImGui::Spacing();
     const bool outside   = xp::IsTeleportedOutside();
     const bool inCockpit = xp::IsInCockpitView();
+    // In VR the headset sets the camera: writing the head position (Go to hotspot, the
+    // move and heading buttons, Live view) has no effect there.
+    const bool inVR      = xp::IsInVR();
     const float helpW    = ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x;
     const float rowW     = ImGui::GetContentRegionAvail().x - helpW - ImGui::GetStyle().ItemSpacing.x;
-    const ImVec2 useHeadSize(rowW * 0.62f, 44.0f);
-    const ImVec2 goToSize(rowW - useHeadSize.x, 44.0f);
-    if (ui::ui_button(ICON_FA_CROSSHAIRS "  Use my current head position", useHeadSize, editable && !outside))
+    const ImVec2 vec_use_head_button_size(rowW * 0.62f, 44.0f);
+    const ImVec2 vec_goto_button_size(rowW - vec_use_head_button_size.x, 44.0f);
+    if (ui::ui_button(ICON_FA_CROSSHAIRS "  Use my current head position", vec_use_head_button_size, editable && !outside))
         UseHeadPosition();
     ImGui::SameLine();
-    if (ui::ui_color_button(ICON_FA_STREET_VIEW "  Go to hotspot", goToSize, theme::kGoTo, editable && !outside && inCockpit))
+    if (ui::ui_color_button(ICON_FA_STREET_VIEW "  Go to hotspot", vec_goto_button_size, theme::kGoTo,
+                            editable && !outside && inCockpit && !inVR))
         GoToHotspot();
     ImGui::SameLine();
     const std::string headHelp = std::string(
         outside ? "Not available: you are teleported outside the aircraft. Teleport back inside first.\n\n"
-                : (inCockpit ? "" : "Go to hotspot is not available while the view is outside the cockpit.\n\n")) +
+                : (inVR ? "Go to hotspot is not available in VR: the headset sets the camera.\n\n"
+                        : (inCockpit ? "" : "Go to hotspot is not available while the view is outside the cockpit.\n\n"))) +
         "Use my current head position: sit or stand where you want this hotspot, look in the "
         "direction it should face, then press. Your head position (X, Y, Z) and heading are "
         "stored as they are; pitch and roll are set to 0.\n\n"
@@ -572,15 +579,22 @@ void SpotPage::ui_move_controls()
     ui::ui_help_marker(headHelp.c_str());
 
     ImGui::Spacing();
+    if (inVR) {
+        ui_vr_note();
+        ui_vr_move_buttons(editable);
+        ui_revert_and_live_view(spotIndex, editable, inVR, false);
+        return;
+    }
+    StopVrMoves();                                     // left VR while a button was held
     const float spacing = ImGui::GetStyle().ItemSpacing.x;
     const float startX  = ImGui::GetCursorPosX();
     const float upDownX = startX + 3.0f * (kArrowW + spacing) + 24.0f;
-    const ImVec2 arrow(kArrowW, kArrowH);
+    const ImVec2 vec_arrows_size(kArrowW, kArrowH);
 
     ImGui::SetCursorPosX(startX + kArrowW + spacing);
-    const float fwd = ui::ui_hold_button(ICON_FA_ARROW_UP " Forward", arrow, editable);
+    const float fwd = ui::ui_hold_button(ICON_FA_ARROW_UP " Forward", vec_arrows_size, editable);
     ImGui::SameLine(upDownX);
-    const float up = ui::ui_hold_button(ICON_FA_CARET_UP " Up", arrow, editable);
+    const float up = ui::ui_hold_button(ICON_FA_CARET_UP " Up", vec_arrows_size, editable);
     ImGui::SameLine();
     ui::ui_help_marker("Tap to move 1 cm. Hold to keep moving - the longer you hold, the faster it moves.\n"
                        "Forward / Back / Left / Right follow the direction the camera looks "
@@ -588,13 +602,13 @@ void SpotPage::ui_move_controls()
                        "The teleport box moves with the hotspot.");
 
     ImGui::SetCursorPosX(startX);
-    const float left = ui::ui_hold_button(ICON_FA_ARROW_LEFT " Left", arrow, editable);
+    const float left = ui::ui_hold_button(ICON_FA_ARROW_LEFT " Left", vec_arrows_size, editable);
     ImGui::SameLine();
-    const float back = ui::ui_hold_button(ICON_FA_ARROW_DOWN " Back", arrow, editable);
+    const float back = ui::ui_hold_button(ICON_FA_ARROW_DOWN " Back", vec_arrows_size, editable);
     ImGui::SameLine();
-    const float right = ui::ui_hold_button(ICON_FA_ARROW_RIGHT " Right", arrow, editable);
+    const float right = ui::ui_hold_button(ICON_FA_ARROW_RIGHT " Right", vec_arrows_size, editable);
     ImGui::SameLine(upDownX);
-    const float down = ui::ui_hold_button(ICON_FA_CARET_DOWN " Down", arrow, editable);
+    const float down = ui::ui_hold_button(ICON_FA_CARET_DOWN " Down", vec_arrows_size, editable);
 
     // Heading: fine turn and the four directions, on one line.
     ImGui::Spacing();
@@ -608,15 +622,15 @@ void SpotPage::ui_move_controls()
     ImGui::SameLine();
     const float  presetGap   = 10.0f;
     const float  headingW    = (ImGui::GetContentRegionAvail().x - 5.0f * spacing - presetGap) / 6.0f;
-    const ImVec2 headingSize(headingW, kArrowH);
-    const float ccw = ui::ui_hold_button(ICON_FA_UNDO " 1\xC2\xB0", headingSize, editable);
+    const ImVec2 vec_heading_button_size(headingW, kArrowH);
+    const float ccw = ui::ui_hold_button(ICON_FA_UNDO " 1\xC2\xB0", vec_heading_button_size, editable);
     ImGui::SameLine();
-    const float cw = ui::ui_hold_button(ICON_FA_REDO " 1\xC2\xB0", headingSize, editable);
+    const float cw = ui::ui_hold_button(ICON_FA_REDO " 1\xC2\xB0", vec_heading_button_size, editable);
     std::optional<double> presetHeading;
     for (const HeadingPreset& preset : kHeadingPresets) {
         ImGui::SameLine(0.0f, &preset == &kHeadingPresets[0] ? spacing + presetGap : spacing);
         const bool current = HeadingDifference(mEditor.Edited(spotIndex).heading, preset.degrees) < kHeadingMatch;
-        if (ui_heading_preset_button(preset.label, headingSize, current, editable))
+        if (ui_heading_preset_button(preset.label, vec_heading_button_size, current, editable))
             presetHeading = preset.degrees;
     }
 
@@ -649,7 +663,12 @@ void SpotPage::ui_move_controls()
         repositioned = true;
     }
 
-    // Revert + live view
+    ui_revert_and_live_view(spotIndex, editable, inVR, repositioned);
+}
+
+// Revert, Adv and the Live view toggle, under the move controls (or the VR note).
+void SpotPage::ui_revert_and_live_view(std::size_t spotIndex, bool editable, bool inVR, bool repositioned)
+{
     ImGui::Spacing();
     if (ui::ui_button(ICON_FA_UNDO_ALT " Revert this hotspot", ImVec2(0, 0), editable && mEditor.IsChanged(spotIndex))) {
         LOG_INFO("reverted '{}'", SpotLabel(spotIndex));
@@ -662,22 +681,104 @@ void SpotPage::ui_move_controls()
     if (ui::ui_color_button(ICON_FA_SLIDERS_H " Adv", ImVec2(80.0f, 0.0f), theme::kAdvanced, editable))
         OpenAdvancedPopup();
     ImGui::SameLine();
+    ImGui::BeginDisabled(inVR);                       // the headset sets the camera in VR
     ui_live_view_toggle();
+    ImGui::EndDisabled();
 
-    if (repositioned) {
+    if (repositioned && !inVR) {
         mNotice.clear();
         ApplyLiveView();
     }
 }
 
-bool SpotPage::ui_heading_preset_button(const char* label, const ImVec2& size, bool current, bool enabled)
+// In VR: a note in the place of the heading row (same height, the page does not move).
+// Positions found in VR may not match the 2D ones the hotspots are made with.
+void SpotPage::ui_vr_note()
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float noteH = kArrowH + style.ItemSpacing.y;          // the heading row and the space above it
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::kVrNoteBg);
+    ImGui::PushStyleColor(ImGuiCol_Border, theme::kVrNoteBorder);
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 2.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+    ImGui::BeginChild("##vrnote", ImVec2(-FLT_MIN, noteH), ImGuiChildFlags_Borders);
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+    ui::ui_wrapped_text(ICON_FA_VR_CARDBOARD "  In VR the buttons below move you, not the hotspot.", &theme::kVrNoteText);
+    ImGui::TextUnformatted("Store with \"Use my current head position\". VR may not match 2D.");
+    ImGui::SameLine();
+    ui::ui_help_marker("The VR head position may not line up with the 2D positions the hotspots are made "
+                       "with. We strongly suggest defining hotspots in 2D mode.\n\n"
+                       "In VR the move buttons run X-Plane's own view commands (as the arrow keys and , / .): "
+                       "they move you, at X-Plane's speed. Nothing changes in the hotspot until you press "
+                       "\"Use my current head position\". Turning, Go to hotspot and Live view are off in VR: "
+                       "the headset sets the direction you look.");
+    ImGui::EndChild();
+}
+
+// In VR: Forward / Back / Left / Right / Up / Down run X-Plane's view commands while held.
+void SpotPage::ui_vr_move_buttons(bool editable)
+{
+    struct VrMove { const char* label; const char* command; };
+    static constexpr std::array<VrMove, kVrMoveCount> kVrMoves{{
+        {ICON_FA_ARROW_UP " Forward", "sim/general/forward"},
+        {ICON_FA_CARET_UP " Up", "sim/general/up"},
+        {ICON_FA_ARROW_LEFT " Left", "sim/general/left"},
+        {ICON_FA_ARROW_DOWN " Back", "sim/general/backward"},
+        {ICON_FA_ARROW_RIGHT " Right", "sim/general/right"},
+        {ICON_FA_CARET_DOWN " Down", "sim/general/down"},
+    }};
+    auto lmbda_move = [&](std::size_t index) {
+        ui::ui_button(kVrMoves[index].label, ImVec2(kArrowW, kArrowH), editable);
+        const bool held = editable && ImGui::IsItemActive();
+        if (held != mVrMoveHeld[index]) {
+            if (!mVrMoveRefs[index])
+                mVrMoveRefs[index] = XPLMFindCommand(kVrMoves[index].command);
+            if (mVrMoveRefs[index]) {
+                if (held)
+                    XPLMCommandBegin(mVrMoveRefs[index]);
+                else
+                    XPLMCommandEnd(mVrMoveRefs[index]);
+                LOG_DEBUG_AS("lmbda_move", "VR move {} {}", kVrMoves[index].command, held ? "begin" : "end");
+            }
+            mVrMoveHeld[index] = held;
+        }
+    };
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    const float startX  = ImGui::GetCursorPosX();
+    const float upDownX = startX + 3.0f * (kArrowW + spacing) + 24.0f;
+    ImGui::SetCursorPosX(startX + kArrowW + spacing);
+    lmbda_move(0);                                     // Forward
+    ImGui::SameLine(upDownX);
+    lmbda_move(1);                                     // Up
+    ImGui::SetCursorPosX(startX);
+    lmbda_move(2);                                     // Left
+    ImGui::SameLine();
+    lmbda_move(3);                                     // Back
+    ImGui::SameLine();
+    lmbda_move(4);                                     // Right
+    ImGui::SameLine(upDownX);
+    lmbda_move(5);                                     // Down
+}
+
+// Ends every VR move command still running (button released elsewhere, VR left, page left).
+void SpotPage::StopVrMoves()
+{
+    for (std::size_t i = 0; i < kVrMoveCount; ++i) {
+        if (mVrMoveHeld[i] && mVrMoveRefs[i])
+            XPLMCommandEnd(mVrMoveRefs[i]);
+        mVrMoveHeld[i] = false;
+    }
+}
+
+bool SpotPage::ui_heading_preset_button(const char* label, const ImVec2& vec_button_size, bool current, bool enabled)
 {
     // The current direction: darker button with a white frame.
     if (current && enabled) {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
         ImGui::PushStyleColor(ImGuiCol_Border, theme::kTextOnColor);
     }
-    const bool pressed = ui::ui_color_button(label, size, current ? theme::kButtonActive : theme::kButton,
+    const bool pressed = ui::ui_color_button(label, vec_button_size, current ? theme::kButtonActive : theme::kButton,
                                              theme::kButtonHover, theme::kButtonActive, enabled);
     if (current && enabled) {
         ImGui::PopStyleColor();
@@ -769,15 +870,15 @@ void SpotPage::ui_status_and_save()
     }
 
     const float  helpW = ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x;
-    const ImVec2 size(ui::ui_fill_width(3, helpW), 40.0f);
-    if (ui::ui_color_button(ICON_FA_SAVE " Save", size, theme::kChanged, theme::kChangedHover,
+    const ImVec2 vec_button_size(ui::ui_fill_width(3, helpW), 40.0f);
+    if (ui::ui_color_button(ICON_FA_SAVE " Save", vec_button_size, theme::kChanged, theme::kChangedHover,
                             theme::kChangedActive, changes > 0))
         DoSave(false);
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_TIMES " Cancel changes", size, changes > 0))
+    if (ui::ui_button(ICON_FA_TIMES " Cancel changes", vec_button_size, changes > 0))
         mAskCancel = true;
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_HISTORY " Restore backup", size, mEditor.HasBackup()))
+    if (ui::ui_button(ICON_FA_HISTORY " Restore backup", vec_button_size, mEditor.HasBackup()))
         mAskRestore = true;
     ImGui::SameLine();
     if (const auto backupTime = mEditor.BackupTime()) {
@@ -983,11 +1084,11 @@ void SpotPage::ui_popup_add_spot()
         ui::ui_wrapped_text(std::string(ICON_FA_EXCLAMATION_TRIANGLE " ") + mAddError, &theme::kErrorText);
 
     ImGui::Spacing();
-    const ImVec2 size(150.0f, 36.0f);
-    if (ui::ui_button(ICON_FA_PLUS " Add", size, !(mAddFrom == 0 && outside)))
+    const ImVec2 vec_button_size(150.0f, 36.0f);
+    if (ui::ui_button(ICON_FA_PLUS " Add", vec_button_size, !(mAddFrom == 0 && outside)))
         AddSpotFromPopup();
     ImGui::SameLine();
-    if (ui::ui_button("Cancel", size)) {
+    if (ui::ui_button("Cancel", vec_button_size)) {
         mAddError.clear();
         ImGui::CloseCurrentPopup();
     }
@@ -1094,6 +1195,19 @@ void SpotPage::ui_popup_advanced()
     }
     ImGui::PopStyleColor();
 
+    if (xp::IsInVR()) {
+        // The values still change and are saved; the headset sets the head's tilt in VR.
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::kVrNoteBg);
+        ImGui::PushStyleColor(ImGuiCol_Border, theme::kVrNoteBorder);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 2.0f);
+        ImGui::BeginChild("##vradvnote", ImVec2(-FLT_MIN, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY);
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(2);
+        ui::ui_wrapped_text(ICON_FA_VR_CARDBOARD "  In VR you can change the pitch and roll (tilt) here, but "
+                            "your head's pitch and roll won't follow them in real time.", &theme::kVrNoteText);
+        ImGui::EndChild();
+    }
+
     ui_advanced_tilt();
     ui_advanced_copy();
 
@@ -1156,11 +1270,11 @@ void SpotPage::ui_advanced_tilt()
         }
         ImGui::EndDisabled();
         ImGui::PopStyleColor();
-        const ImVec2 size(70.0f, 0.0f);
+        const ImVec2 vec_button_size(70.0f, 0.0f);
         ImGui::SameLine();
-        const float minus = ui::ui_hold_button(minusLabel, size, editable);
+        const float minus = ui::ui_hold_button(minusLabel, vec_button_size, editable);
         ImGui::SameLine();
-        const float plus = ui::ui_hold_button(plusLabel, size, editable);
+        const float plus = ui::ui_hold_button(plusLabel, vec_button_size, editable);
         ImGui::SameLine();
         const std::string zeroLabel = std::string("0##") + id;
         const bool zero = ui::ui_button(zeroLabel.c_str(), ImVec2(44.0f, 0.0f), editable);

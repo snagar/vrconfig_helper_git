@@ -24,10 +24,10 @@ constexpr float kLogoSize = 112.0f;
 
 // The plugin's logo, drawn (no image file): a VR headset whose right lens is a
 // knob with a pointer, over a teleport ring, on a rounded blue badge.
-void ui_draw_logo(ImDrawList* draw, ImVec2 origin, float size)
+void ui_draw_logo(ImDrawList* draw, ImVec2 vec_logo_origin, float size)
 {
     const float unit = size / 100.0f;
-    auto lmbda_at = [&](float x, float y) { return ImVec2(origin.x + x * unit, origin.y + y * unit); };
+    auto lmbda_at = [&](float x, float y) { return ImVec2(vec_logo_origin.x + x * unit, vec_logo_origin.y + y * unit); };
     const ImU32 badge   = ImGui::GetColorU32(ui::theme::kButton);
     const ImU32 badgeHi = ImGui::GetColorU32(ui::theme::kButtonHover);
     const ImU32 white   = ImGui::GetColorU32(ui::theme::kTextOnColor);
@@ -52,18 +52,18 @@ void ui_draw_logo(ImDrawList* draw, ImVec2 origin, float size)
     draw->AddCircleFilled(lmbda_at(35, 43), 10.0f * unit, badge, 32);
     draw->AddCircleFilled(lmbda_at(32, 40), 3.0f * unit, badgeHi, 16);
     // Right lens = a knob: dial, ticks, pointer.
-    const ImVec2 knob = lmbda_at(63, 43);
-    draw->AddCircleFilled(knob, 10.0f * unit, badge, 32);
+    const ImVec2 vec_knob_center = lmbda_at(63, 43);
+    draw->AddCircleFilled(vec_knob_center, 10.0f * unit, badge, 32);
     for (int i = 0; i < 7; ++i) {
         const float angle = 3.14159f * (0.75f + 0.25f * static_cast<float>(i));      // a 270 degree scale
-        const ImVec2 from(knob.x + std::cos(angle) * 6.5f * unit, knob.y + std::sin(angle) * 6.5f * unit);
-        const ImVec2 to(knob.x + std::cos(angle) * 9.0f * unit, knob.y + std::sin(angle) * 9.0f * unit);
-        draw->AddLine(from, to, white, 1.2f * unit);
+        const ImVec2 vec_pointer_from(vec_knob_center.x + std::cos(angle) * 6.5f * unit, vec_knob_center.y + std::sin(angle) * 6.5f * unit);
+        const ImVec2 vec_pointer_to(vec_knob_center.x + std::cos(angle) * 9.0f * unit, vec_knob_center.y + std::sin(angle) * 9.0f * unit);
+        draw->AddLine(vec_pointer_from, vec_pointer_to, white, 1.2f * unit);
     }
     const float pointer = 3.14159f * 1.6f;
-    draw->AddLine(knob, ImVec2(knob.x + std::cos(pointer) * 6.0f * unit, knob.y + std::sin(pointer) * 6.0f * unit),
+    draw->AddLine(vec_knob_center, ImVec2(vec_knob_center.x + std::cos(pointer) * 6.0f * unit, vec_knob_center.y + std::sin(pointer) * 6.0f * unit),
                   accent, 2.5f * unit);
-    draw->AddCircleFilled(knob, 2.0f * unit, accent, 12);
+    draw->AddCircleFilled(vec_knob_center, 2.0f * unit, accent, 12);
 }
 
 } // namespace
@@ -245,17 +245,17 @@ void PluginWindow::ui_home_page()
 
 void PluginWindow::ui_popup_about()
 {
-    const ImVec2 windowPos  = ImGui::GetWindowPos();
-    const ImVec2 windowSize = ImGui::GetWindowSize();
-    ImGui::SetNextWindowPos(ImVec2(windowPos.x + windowSize.x * 0.5f, windowPos.y + windowSize.y * 0.4f),
+    const ImVec2 vec_window_pos  = ImGui::GetWindowPos();
+    const ImVec2 vec_window_size = ImGui::GetWindowSize();
+    ImGui::SetNextWindowPos(ImVec2(vec_window_pos.x + vec_window_size.x * 0.5f, vec_window_pos.y + vec_window_size.y * 0.4f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(windowSize.x - 60.0f, 0.0f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(vec_window_size.x - 60.0f, 0.0f), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal(kPopupAbout, nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                                                         ImGuiWindowFlags_AlwaysAutoResize))
         return;
     const ImGuiStyle& style = ImGui::GetStyle();
-    const ImVec2 logoAt = ImGui::GetCursorScreenPos();
-    ui_draw_logo(ImGui::GetWindowDrawList(), logoAt, kLogoSize);
+    const ImVec2 vec_logo_pos = ImGui::GetCursorScreenPos();
+    ui_draw_logo(ImGui::GetWindowDrawList(), vec_logo_pos, kLogoSize);
     ImGui::Dummy(ImVec2(kLogoSize + 4.0f, kLogoSize + 4.0f));
     ImGui::SameLine(0.0f, style.ItemSpacing.x * 2.0f);
     ImGui::BeginGroup();
@@ -270,6 +270,7 @@ void PluginWindow::ui_popup_about()
     ImGui::Spacing();
     ImGui::TextDisabled("%s", info::kInspiredBy.data());
     ui::ui_wrapped_text(std::string(info::kIconCredit).c_str(), &ui::theme::kTextDisabled);
+    ui::ui_wrapped_text(std::string(info::kLibraryCredit).c_str(), &ui::theme::kTextDisabled);
     ImGui::Spacing();
     ui::ui_wrapped_text("Edits an aircraft's vrconfig file: VR teleport hotspots and the VR behaviour of its "
                         "knobs, switches and levers.", &ui::theme::kTextDisabled);

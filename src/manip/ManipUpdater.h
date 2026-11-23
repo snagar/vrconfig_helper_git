@@ -10,7 +10,7 @@
 //  * Nothing is written before Save. Save applies every change at once, then
 //    reads the file again.
 //  * Backup: the first Save of the file in this X-Plane run copies it to
-//    "<file>.manip.upd.bak" (its own backup, apart from the hotspot and Extract
+//    "<file>.updater.bak" (its own backup, apart from the hotspot and Extract
 //    ones). The first save in a later run replaces it. RestoreBackup puts it back.
 //  * A block without END_MANIP cannot be changed.
 //
@@ -81,7 +81,8 @@ public:
     std::optional<Clock::time_point> LastSaveTime() const { return mLastSave; }
 
     // --- backup ---
-    std::filesystem::path BackupPath() const;                  // <file>.manip.upd.bak
+    std::filesystem::path BackupPath() const;                  // <file>.updater.bak
+    std::filesystem::path RestorePath() const;                 // BackupPath(), or the name used up to v1.0
     bool HasBackup() const;
     bool BackupMadeThisRun() const;
     std::optional<Clock::time_point> BackupTime() const;

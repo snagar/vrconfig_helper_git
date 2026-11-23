@@ -348,14 +348,27 @@ SaveResult ManipEditor::Save(bool overwriteOutsideChanges)
 fs::path ManipEditor::BackupPath() const
 {
     fs::path backup = mFile.FilePath();
-    backup += ".manip.bak";
+    backup += ".extract.bak";
     return backup;
+}
+
+// The backup to restore: the current name, or the name used up to v1.0
+// (".manip.bak") when only that one exists, so an older backup is still found.
+fs::path ManipEditor::RestorePath() const
+{
+    std::error_code ec;
+    const fs::path current = BackupPath();
+    if (fs::exists(current, ec))
+        return current;
+    fs::path older = mFile.FilePath();
+    older += ".manip.bak";
+    return fs::exists(older, ec) ? older : current;
 }
 
 bool ManipEditor::HasBackup() const
 {
     std::error_code ec;
-    return mOpen && mFileOnDisk && fs::exists(BackupPath(), ec);
+    return mOpen && mFileOnDisk && fs::exists(RestorePath(), ec);
 }
 
 bool ManipEditor::BackupMadeThisRun() const
@@ -368,7 +381,7 @@ std::optional<ManipEditor::Clock::time_point> ManipEditor::BackupTime() const
     std::error_code ec;
     if (!HasBackup())
         return std::nullopt;
-    const auto fileTime = fs::last_write_time(BackupPath(), ec);
+    const auto fileTime = fs::last_write_time(RestorePath(), ec);
     if (ec)
         return std::nullopt;
     return util::ToSystemTime(fileTime);
@@ -381,7 +394,7 @@ bool ManipEditor::RestoreBackup()
         return false;
     }
     const fs::path file = mFile.FilePath();
-    if (!CopyFileSafely(BackupPath(), file, mLastError)) {
+    if (!CopyFileSafely(RestorePath(), file, mLastError)) {
         LOG_ERROR("restore failed: {}", mLastError);
         return false;
     }

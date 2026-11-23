@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "XPLMUtilities.h"
 
 #include "hotspot/SpotEditor.h"
 #include "xp/Aircraft.h"
@@ -44,9 +45,13 @@ private:
     void ui_rename_row();
     void ui_value_table();
     void ui_move_controls();
+    void ui_revert_and_live_view(std::size_t spotIndex, bool editable, bool inVR, bool repositioned);
+    void ui_vr_note();
+    void ui_vr_move_buttons(bool editable);
+    void StopVrMoves();
     void ui_status_and_save();
     void ui_live_view_toggle();
-    bool ui_heading_preset_button(const char* label, const ImVec2& size, bool current, bool enabled);
+    bool ui_heading_preset_button(const char* label, const ImVec2& vec_button_size, bool current, bool enabled);
 
     // popups (opened by flags set during the frame)
     void ui_popups();
@@ -91,6 +96,10 @@ private:
 
     std::string                     mNotice;
     std::string                     mLiveViewPaused;   // why the camera was not moved (empty = following)
+    // VR: the six move buttons run X-Plane's view commands while held.
+    static constexpr std::size_t           kVrMoveCount = 6;
+    std::array<XPLMCommandRef, kVrMoveCount> mVrMoveRefs{};   // found on first use
+    std::array<bool, kVrMoveCount>           mVrMoveHeld{};   // command begun, not yet ended
     std::string                     mError;            // last save / restore error
 
     // Advanced popup state

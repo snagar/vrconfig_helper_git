@@ -70,8 +70,12 @@ HOTSPOT SCREEN
 --------------
 
 This screen places the teleport hotspots of the loaded aircraft: the seats
-and standing spots you jump to in VR. Sit in VR while you use it, so you see
-each change from the hotspot itself.
+and standing spots you jump to in VR. Use it in 2D (without the headset):
+the VR head position may not line up with the 2D positions, so we strongly
+suggest defining hotspots in 2D. In VR the move buttons move you, not the
+hotspot (like the arrow keys): press "Use my current head position" to store
+where you are. Turning, Go to hotspot and Live view are off in VR. In Adv you
+can still change pitch and roll, but your head won't follow them in VR.
 
 Typical use: pick a hotspot, sit where it should be, press "Use my current
 head position", fine-tune, then Save and reload the aircraft.
@@ -103,7 +107,7 @@ Problems in the file:
   remarks: misspelled keywords (for example EGIN_TELEPORT_HOTSPOT), lines
   outside a block, the same hotspot name used twice.
 
-Backup: <aircraft>_vrconfig.txt.bak
+Backup: <aircraft>_vrconfig.txt.hotspot.bak
 
 
 EXTRACT MANIPULATORS TO VRCONFIG SCREEN
@@ -152,7 +156,7 @@ Defaults written: knobs get DEG_PER_ACTION (how far to turn the wrist per
 click): 30 deg for selectors, 10 deg for altitude knobs, 5 deg for the rest.
 Other types get the template from manip_types.ini.
 
-Backup: <aircraft>_vrconfig.txt.manip.bak. Loading an aircraft starts step 1
+Backup: <aircraft>_vrconfig.txt.extract.bak. Loading an aircraft starts step 1
 again.
 
 
@@ -208,7 +212,7 @@ fixed, orange warnings allow "Apply anyway".
 Save writes all changes. Changes for an aircraft that isn't loaded stay
 until you save or cancel.
 
-Backup: <aircraft>_vrconfig.txt.manip.upd.bak
+Backup: <aircraft>_vrconfig.txt.updater.bak
 
 
 RULE FILES: YOUR OWN TYPES AND ACTIONS
@@ -247,15 +251,21 @@ FILES AND TROUBLESHOOTING
 
   <aircraft>_vrconfig.txt
       Where: aircraft folder. Written by: Save, on any screen.
-  ..._vrconfig.txt.bak
+  ..._vrconfig.txt.hotspot.bak
       Where: aircraft folder. Written by: Hotspot screen, first save per
       X-Plane run.
-  ..._vrconfig.txt.manip.bak
+  ..._vrconfig.txt.extract.bak
       Where: aircraft folder. Written by: Extract screen, first save per
       X-Plane run.
-  ..._vrconfig.txt.manip.upd.bak
+  ..._vrconfig.txt.updater.bak
       Where: aircraft folder. Written by: Updater screen, first save per
       X-Plane run.
+  ..._vrconfig.txt.last_save
+      Where: aircraft folder. Written by: every Save, on any screen - a copy
+      of the saved file. An aircraft update that replaces the vrconfig file
+      leaves it alone: rename it back to keep your work.
+  (Backups made by v1.0 are named .bak, .manip.bak and
+  .manip.upd.bak; Restore backup still finds them.)
   custom_manip_types.ini, custom_manip_actions.ini
       Where: plugin folder. Written by: you (optional).
   vrconfig_helper.log

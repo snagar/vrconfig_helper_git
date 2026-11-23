@@ -46,6 +46,11 @@ inline const ImVec4& kGoTo          = color::color_vec4_hpvr_advanced;
 inline const ImVec4& kSameFolderText  = color::color_vec4_hpvr_same_folder_text;
 inline const ImVec4& kOtherFolderText = color::color_vec4_hpvr_other_folder_text;
 
+// The VR note on the Hotspot page and in its Adv popup (aqua)
+inline const ImVec4& kVrNoteBg      = color::color_vec4_hpvr_vr_note_bg;
+inline const ImVec4& kVrNoteBorder  = color::color_vec4_hpvr_vr_note_border;
+inline const ImVec4& kVrNoteText    = color::color_vec4_hpvr_vr_note_text;
+
 // Errors (red)
 inline const ImVec4& kError         = color::color_vec4_hpvr_error;
 inline const ImVec4& kErrorText     = color::color_vec4_hpvr_error_text;

@@ -15,7 +15,7 @@
 //  * Changes are kept in memory until Save or Cancel, also while another page
 //    is shown or the window is closed. Loading an aircraft discards them.
 //  * Backup: the first Save of an existing file in this X-Plane run copies it to
-//    "<file>.manip.bak" (not the hotspot backup). The first save in a later run
+//    "<file>.extract.bak" (not the hotspot backup). The first save in a later run
 //    replaces it. RestoreBackup puts it back. A new file has no backup.
 //  * Default block content: knobs DEG_PER_ACTION (30 selector, 10 altitude,
 //    else 5); switches empty; levers and yoke empty with a TODO comment.
@@ -99,7 +99,8 @@ public:
     std::optional<Clock::time_point> LastSaveTime() const { return mLastSave; }
 
     // --- backup ---
-    std::filesystem::path BackupPath() const;          // <file>.manip.bak
+    std::filesystem::path BackupPath() const;          // <file>.extract.bak
+    std::filesystem::path RestorePath() const;                 // BackupPath(), or the name used up to v1.0
     bool HasBackup() const;
     bool BackupMadeThisRun() const;
     std::optional<Clock::time_point> BackupTime() const;

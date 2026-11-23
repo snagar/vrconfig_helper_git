@@ -78,8 +78,10 @@ const char* kExplainText =
     "- \"hold/spring\" = HOLD_MANIP: the command keeps running while the control is held - for "
     "spring-loaded switches, starter keys and trim switches.\n"
     "- Nothing is written before Save. Cancel changes undoes them all.\n"
-    "- The first Save in this X-Plane run makes a backup: <aircraft>_vrconfig.txt.manip.upd.bak (apart from "
+    "- The first Save in this X-Plane run makes a backup: <aircraft>_vrconfig.txt.updater.bak (apart from "
     "the hotspot and Extract backups). Restore backup puts it back.\n"
+    "- Every Save also keeps a copy of the saved file: <aircraft>_vrconfig.txt.last_save. An aircraft "
+    "update that replaces the vrconfig file leaves it alone, so your work is not lost.\n"
     "- The ACTIONs and settings, with their help texts, come from manip_actions.ini in the plugin folder, "
     "the types from manip_types.ini. Don't edit those (a plugin update replaces them): copy one to "
     "custom_manip_actions.ini / custom_manip_types.ini and edit the copy - it is then used instead.\n"
@@ -129,12 +131,12 @@ bool InputString(const char* id, std::string& value, float width, ImGuiInputText
 }
 
 // Read-only multi-line box that can still be selected and copied.
-void ReadOnlyText(const char* id, const std::string& text, const ImVec2& size)
+void ReadOnlyText(const char* id, const std::string& text, const ImVec2& vec_text_box_size)
 {
     std::vector<char> buffer(text.begin(), text.end());
     buffer.push_back('\0');
     ImGui::PushStyleColor(ImGuiCol_FrameBg, theme::kPanelBg);
-    ImGui::InputTextMultiline(id, buffer.data(), buffer.size(), size, ImGuiInputTextFlags_ReadOnly);
+    ImGui::InputTextMultiline(id, buffer.data(), buffer.size(), vec_text_box_size, ImGuiInputTextFlags_ReadOnly);
     ImGui::PopStyleColor();
 }
 
@@ -848,26 +850,26 @@ void UpdaterPage::ui_status_and_save()
     }
 
     const float  helpW = ImGui::CalcTextSize("(?)").x + ImGui::GetStyle().ItemSpacing.x;
-    const ImVec2 size(ui::ui_fill_width(3, helpW), 40.0f);
-    if (ui::ui_color_button(ICON_FA_SAVE " Save", size, theme::kChanged, theme::kChangedHover, theme::kChangedActive,
+    const ImVec2 vec_button_size(ui::ui_fill_width(3, helpW), 40.0f);
+    if (ui::ui_color_button(ICON_FA_SAVE " Save", vec_button_size, theme::kChanged, theme::kChangedHover, theme::kChangedActive,
                             changes > 0))
         DoSave(false);
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_TIMES " Cancel changes", size, changes > 0))
+    if (ui::ui_button(ICON_FA_TIMES " Cancel changes", vec_button_size, changes > 0))
         mAskCancel = true;
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_HISTORY " Restore backup", size, mUpdater.HasBackup()))
+    if (ui::ui_button(ICON_FA_HISTORY " Restore backup", vec_button_size, mUpdater.HasBackup()))
         mAskRestore = true;
     ImGui::SameLine();
     if (const auto backupTime = mUpdater.BackupTime()) {
         const std::string help = std::format(
             "Backup of the vrconfig file before the first update saved, made at {}{} "
-            "(<aircraft>_vrconfig.txt.manip.upd.bak). Restoring undoes every update saved since then, and "
+            "(<aircraft>_vrconfig.txt.updater.bak). Restoring undoes every update saved since then, and "
             "discards unsaved ones.", hotspot::ClockTime(*backupTime),
             mUpdater.BackupMadeThisRun() ? " in this X-Plane run" : " in an earlier X-Plane run");
         ui::ui_help_marker(help.c_str());
     } else {
-        ui::ui_help_marker("A backup (<aircraft>_vrconfig.txt.manip.upd.bak) is made the first time you save "
+        ui::ui_help_marker("A backup (<aircraft>_vrconfig.txt.updater.bak) is made the first time you save "
                            "updates of this file in this X-Plane run. It is apart from the hotspot and Extract "
                            "backups.");
     }
@@ -962,11 +964,11 @@ std::vector<std::string> UpdaterPage::EditPrefill(const ActionDef& action) const
 
 void UpdaterPage::ui_popup_edit()
 {
-    const ImVec2 windowPos  = ImGui::GetWindowPos();
-    const ImVec2 windowSize = ImGui::GetWindowSize();
-    ImGui::SetNextWindowPos(ImVec2(windowPos.x + windowSize.x * 0.5f, windowPos.y + windowSize.y * 0.5f),
+    const ImVec2 vec_window_pos  = ImGui::GetWindowPos();
+    const ImVec2 vec_window_size = ImGui::GetWindowSize();
+    ImGui::SetNextWindowPos(ImVec2(vec_window_pos.x + vec_window_size.x * 0.5f, vec_window_pos.y + vec_window_size.y * 0.5f),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(windowSize.x - 24.0f, windowSize.y - 24.0f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(vec_window_size.x - 24.0f, vec_window_size.y - 24.0f), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal(kPopupEdit, nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                                                        ImGuiWindowFlags_NoScrollbar))
         return;
@@ -1006,13 +1008,13 @@ void UpdaterPage::ui_popup_edit()
     if (mUpdater.IsRemoved(mEditIndex)) {
         ui::ui_wrapped_text(ICON_FA_TIMES " This block is removed when you Save.", &theme::kChangedText);
         ImGui::Spacing();
-        const ImVec2 size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);
-        if (ui::ui_button(ICON_FA_UNDO " Keep the block", size)) {
+        const ImVec2 vec_button_size((ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f, 40.0f);
+        if (ui::ui_button(ICON_FA_UNDO " Keep the block", vec_button_size)) {
             mUpdater.Revert(mEditIndex);
             OpenEditor(mEditIndex);                              // show it as it is
         }
         ImGui::SameLine();
-        if (ui::ui_button("Close", size))
+        if (ui::ui_button("Close", vec_button_size))
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
         return;
@@ -1410,29 +1412,29 @@ void UpdaterPage::ui_edit_buttons(const std::vector<std::string>& afterLines, co
                           (mEditFreeText != mUpdater.IsHandEdited(mEditIndex) && afterLines != mEditBefore);
     // Apply is wider: "Apply anyway" must fit.
     const float unit = (ImGui::GetContentRegionAvail().x - style.ItemSpacing.x * 3.0f) / 4.6f;
-    const ImVec2 size(unit, kButtonRowH);
-    const ImVec2 applySize(unit * 1.6f, kButtonRowH);
+    const ImVec2 vec_button_size(unit, kButtonRowH);
+    const ImVec2 vec_apply_button_size(unit * 1.6f, kButtonRowH);
 
     const char* apply = warnings ? ICON_FA_CHECK " Apply anyway" : ICON_FA_CHECK " Apply";
-    if (ui::ui_color_button(apply, applySize, warnings ? theme::kChanged : theme::kSaved, !blocking && changed)) {
+    if (ui::ui_color_button(apply, vec_apply_button_size, warnings ? theme::kChanged : theme::kSaved, !blocking && changed)) {
         mUpdater.SetBlock(mEditIndex, afterLines, mEditFreeText);
         mNotice.clear();
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ui::ui_color_button(ICON_FA_TRASH " Remove", size, theme::kError)) {
+    if (ui::ui_color_button(ICON_FA_TRASH " Remove", vec_button_size, theme::kError)) {
         mUpdater.RemoveBlock(mEditIndex);
         mNotice.clear();
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ui::ui_button(ICON_FA_UNDO " Revert", size, mUpdater.IsChanged(mEditIndex))) {
+    if (ui::ui_button(ICON_FA_UNDO " Revert", vec_button_size, mUpdater.IsChanged(mEditIndex))) {
         mUpdater.Revert(mEditIndex);
         OpenEditor(mEditIndex);
         mAskEdit = false;                                    // the popup is already open
     }
     ImGui::SameLine();
-    if (ui::ui_button("Close", size))
+    if (ui::ui_button("Close", vec_button_size))
         ImGui::CloseCurrentPopup();
 }
 
